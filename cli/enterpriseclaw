@@ -5,9 +5,19 @@ source infra/cluster.nu
 
 #Bootstrap method to accomodate EnterpriseClaw's infraestructure
 def --env "main init" [
-    --cloud-provider     = "aws"     #Options: 'aws', 'azure' or 'gcp'
+    --cloud-provider        = "aws"                         #Options: 'aws', 'azure' or 'gcp'
+    --cluster-name          = "enterpriseclaw-cluster"      #K8s cluster's name
+
+    --secret-provider       = "cloud"                       #Secret provider source. Options: 'cloud'. Support is available for: aws/secrets-manager
+    --git-provider          = "github"                      #Options: 'github', 'azure' or 'gitlab'
 ] {
     #1. Setup Infra
-    main cluster setup
+    if ($secret_provider == "cloud") {  #Every resource can be managed with OpenTofu!
+        main cluster setup --cloud-provider=$cloud_provider --cluster-name=$cluster_name --git-secret-name="($git_provider)-creds" --webhook-secret-name="($git_provider)-webhook-creds"
+    }
+
+    
+    
+
 }
 

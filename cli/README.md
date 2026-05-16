@@ -8,7 +8,7 @@ If you intend to configure everything using the CLI, you should...
 
 ## Developer/Contributor
 
-If you intend to locally configure and test the CLI, whether to include new features or to contribute to the project, you should create a `.env` file in this path (`.gitignore` file has been created previously to avoid credentials leakage). **Be careful**, as this file could contain your credentials for cloud provider access and repository registry. Below, you'll find an example of which specific credentials and variables are required in this file:
+If you intend to locally configure and test the CLI, whether to include new features or to contribute to the project, you should create a `.env` file in this path (`.gitignore` file has been previously created to avoid credentials leakage). **Be careful**, as this file could contain your credentials for cloud provider access and repository registry. Below, you'll find an example of which specific credentials and variables are required in this file:
 
 ```bash
 export COMPANY_NAME="Your-Company"
