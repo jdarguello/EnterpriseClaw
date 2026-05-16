@@ -1,0 +1,7 @@
+#!/usr/bin/env nu
+
+
+def --env "main init" [] {
+    
+}
+
