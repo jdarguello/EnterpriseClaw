@@ -16,7 +16,7 @@ def --env "main cluster setup" [
 
     #3. Define infrastructure variables! - tfvars
     if ($cloud_provider == "aws") {
-        cluster aws setup tfvars --git-secret-name=$innersource_secret_name --webhook-secret-name=$webhook_secret_name
+        cluster aws setup tfvars --git-secret-name=$git_secret_name --webhook-secret-name=$webhook_secret_name
     }
 
     #4. Execute OpenTofu
