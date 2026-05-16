@@ -1,7 +1,13 @@
 #!/usr/bin/env nu
 
+source infra/cluster.nu
 
-def --env "main init" [] {
-    
+
+#Bootstrap method to accomodate EnterpriseClaw's infraestructure
+def --env "main init" [
+    --cloud-provider     = "aws"     #Options: 'aws', 'azure' or 'gcp'
+] {
+    #1. Setup Infra
+    main cluster setup
 }
 
