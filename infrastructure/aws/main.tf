@@ -16,3 +16,10 @@ module "cluster" {
   public_subnet_ids     = module.network.public_subnet_ids
   private_subnet_ids    = module.network.private_subnet_ids
 }
+
+module "pipe-storage" {
+  source = "./pipe-storage"
+
+  pipeline_storage_name = "${var.project}-artifacts-storage"
+  project    = var.project
+}
