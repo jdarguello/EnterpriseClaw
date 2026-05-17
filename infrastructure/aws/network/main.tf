@@ -20,6 +20,8 @@ module "vpc" {
   public_subnets  = local.all_public_cidrs
   private_subnets = local.all_private_cidrs
 
+  map_public_ip_on_launch = true
+
   enable_nat_gateway     = true
   one_nat_gateway_per_az = true
 
