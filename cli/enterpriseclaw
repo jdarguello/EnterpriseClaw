@@ -1,5 +1,6 @@
 #!/usr/bin/env nu
 
+source infra/bootstrap.nu
 source infra/cluster.nu
 
 def "main" [] {
@@ -13,16 +14,28 @@ def --env "main init" [
 
     --secret-provider       = "cloud"                       #Secret provider source. Options: 'cloud'. Support is available for: aws/secrets-manager
     --git-provider          = "github"                      #Options: 'github', 'azure' or 'gitlab'
+
+    --persistant-state      = false                          #If true, it will create a blob-storage and a NoSQL storage (DocumentDB/DynamoDB) to persist the tofu state
 ] {
     #1. Setup Infra
     if ($secret_provider == "cloud") {  #Every resource can be managed with OpenTofu!
+        if ($persistant_state) {
+            main cluster bootstrap --cloud-provider=$cloud_provider 
+        }
         main cluster setup --cloud-provider=$cloud_provider --cluster-name=$cluster_name --git-secret-name="($git_provider)-creds" --webhook-secret-name="($git_provider)-webhook-creds"
     }
 }
 
-#Destroy all the created and configured infrastructure of the project!
+#Destroy all the created and configured infrastructure of the project! (Ideal for ephemeral environments)
 def "main destroy" [
-    --cloud-provider        = "aws" #Options: 'aws', 'azure' or 'gcp'
+    --cloud-provider        = "aws"     #Options: 'aws', 'azure' or 'gcp'
+    --local-testing         = false     #If you're doing local testing, you might want to delete the 'bootstrap' tofu configuration
 ] {
+    #1. Destroy all infrastructure
     main cluster teardown --cloud-provider=$cloud_provider
+
+    #2. Delete persistant storage (for local testing)
+    if ($local_testing) {
+        main cluster bootstrap destroy --cloud-provider=$cloud_provider
+    }
 }
