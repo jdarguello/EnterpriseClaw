@@ -13,10 +13,15 @@ If you intend to locally configure and test the CLI, whether to include new feat
 ```bash
 export COMPANY_NAME="Your-Company"
 
-#AWS-creds
-export AWS_ROLE="<aws-role>"                            #Optional
-export AWS_ACCESS_KEY_ID="<access-key>"
-export AWS_SECRET_ACCESS_KEY="<secret-access-key>"
-export AWS_SESSION_TOKEN="<session-token>"              #Optional
+#--------------------------------AWS-PROVIDER--------------------------------------------
+
+#AWS-creds 
+export AWS_ROLE="<aws-role>"
+export AWS_ACCESS_KEY_ID="AKIASJ3VPKNZ6LP3DHFO"
+export AWS_SECRET_ACCESS_KEY="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"
+export AWS_SESSION_TOKEN="<session-token>"
+
+#Generals
+export aws_region="us-east-1"
 ```
 

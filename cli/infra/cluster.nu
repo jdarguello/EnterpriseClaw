@@ -31,13 +31,13 @@ def "main cluster teardown" [
 ] {
     #1. Ir al path de infraestructura
     let current_directory = pwd
-    cd $"../infra/($cloud_provider)"
+    cd $"../infrastructure/($cloud_provider)"
 
     #2. Inicializar OpenTofu
     tofu init
 
     #3. Eliminar infraestructura
-    if ($cloud_provider == "aws) {
+    if ($cloud_provider == "aws") {
         tofu destroy -auto-approve -exclude=aws_route53_record.acm_config
     }
     

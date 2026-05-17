@@ -2,6 +2,9 @@
 
 source infra/cluster.nu
 
+def "main" [] {
+    enterpriseclaw -h
+}
 
 #Bootstrap method to accomodate EnterpriseClaw's infraestructure
 def --env "main init" [
@@ -15,9 +18,11 @@ def --env "main init" [
     if ($secret_provider == "cloud") {  #Every resource can be managed with OpenTofu!
         main cluster setup --cloud-provider=$cloud_provider --cluster-name=$cluster_name --git-secret-name="($git_provider)-creds" --webhook-secret-name="($git_provider)-webhook-creds"
     }
-
-    
-    
-
 }
 
+#Destroy all the created and configured infrastructure of the project!
+def "main destroy" [
+    --cloud-provider        = "aws" #Options: 'aws', 'azure' or 'gcp'
+] {
+    main cluster teardown --cloud-provider=$cloud_provider
+}
