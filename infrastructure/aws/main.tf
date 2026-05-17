@@ -21,5 +21,6 @@ module "pipe-storage" {
   source = "./pipe-storage"
 
   pipeline_storage_name = "${var.project}-artifacts-storage"
-  project    = var.project
+  project               = var.project
 }
+
