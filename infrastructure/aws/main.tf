@@ -9,6 +9,7 @@ module "cluster" {
   source = "./cluster"
 
   project               = var.project
+  cluster_name          = var.cluster_name
   cluster_version       = var.cluster_version
   node_instance_types   = var.node_instance_types
   vpc_id                = module.network.vpc_id

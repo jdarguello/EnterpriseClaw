@@ -3,7 +3,8 @@ data "aws_availability_zones" "available" {
 }
 
 locals {
-  az_count        = length(data.aws_availability_zones.available.names)
+  azs             = slice(sort(data.aws_availability_zones.available.names), 0, min(3, length(data.aws_availability_zones.available.names)))
+  az_count        = length(local.azs)
   all_public_cidrs  = [for i in range(local.az_count) : cidrsubnet("10.0.0.0/16", 8, i + 1)]
   all_private_cidrs = [for i in range(local.az_count) : cidrsubnet("10.0.0.0/16", 8, i + 11)]
 }
@@ -15,7 +16,7 @@ module "vpc" {
   name = "${var.project}-vpc"
   cidr = "10.0.0.0/16"
 
-  azs             = data.aws_availability_zones.available.names
+  azs             = local.azs
   public_subnets  = local.all_public_cidrs
   private_subnets = local.all_private_cidrs
 
