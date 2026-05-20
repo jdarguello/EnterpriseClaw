@@ -10,3 +10,13 @@ variable "subdomains" {
         url     = string
     }))
 }
+
+variable "cluster_name" {
+    description = "k8s cluster name"
+    type        = string
+}
+
+variable "oidc_provider_arn" {
+  description = "EKS OIDC provider arn"
+  type        = string
+}

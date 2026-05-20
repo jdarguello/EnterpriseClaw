@@ -13,3 +13,7 @@ output "domain_zone" {
 output "acm_options" {
   value = module.acm.acm_certificate_domain_validation_options
 }
+
+output "external_dns_arn" {
+  value = module.irsa-external-dns.arn
+}

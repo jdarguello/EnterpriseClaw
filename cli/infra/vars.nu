@@ -5,7 +5,7 @@ def --env "cluster aws setup tfvars" [
     {
         "aws_region": $env.aws_region,
         "project": $"($env.COMPANY_NAME)-EnterpriseClaw",
-        "cluster_name": "EnterpriseClaw-cluster",
+        "cluster_name": "EnterpriseClaw",
         "dns_data" : {
             "domain_name": $env.domain_name,
             "subdomains": [

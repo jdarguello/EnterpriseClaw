@@ -55,3 +55,35 @@ module "acm" {
     Name = var.domain_name
   }
 }
+
+module "external_dns_policy" {
+  source = "terraform-aws-modules/iam/aws//modules/iam-policy"
+
+  name        = "external-dns-policy"
+  path        = "/"
+  description = "Permisos IAM que External-DNS pueda configurar DNS Records"
+
+  policy = file("${path.module}/policies/external_dns.json")
+
+  tags = {
+    OpenTofu    = "true"
+    Environment = "dev"
+  }
+}
+
+module "irsa-external-dns" {
+  source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+
+  name = "${var.cluster_name}-external-dns"
+
+  oidc_providers = {
+    dns_oidc = {
+      provider_arn               = var.oidc_provider_arn
+      namespace_service_accounts = ["kube-system:external-dns", "external-dns:external-dns"]
+    }
+  }
+
+  policies = {
+    policy = module.external_dns_policy.arn
+  }
+}

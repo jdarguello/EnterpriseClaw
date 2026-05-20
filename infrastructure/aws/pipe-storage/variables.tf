@@ -7,3 +7,8 @@ variable "project" {
   description = "Project name used as a prefix for resource tags"
   type        = string
 }
+
+variable "oidc_provider_arn" {
+  description = "EKS OIDC provider arn"
+  type        = string
+}

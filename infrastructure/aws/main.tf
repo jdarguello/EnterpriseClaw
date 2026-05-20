@@ -22,11 +22,14 @@ module "pipe-storage" {
 
   pipeline_storage_name = "${var.project}-artifacts-storage"
   project               = var.project
+  oidc_provider_arn     = module.cluster.oidc_provider_arn
 }
 
 module "dns" {
   source = "./dns"
 
-  domain_name = var.dns_data.domain_name
-  subdomains  = var.dns_data.subdomains
+  domain_name         = var.dns_data.domain_name
+  subdomains          = var.dns_data.subdomains
+  cluster_name        = var.cluster_name
+  oidc_provider_arn   = module.cluster.oidc_provider_arn
 }
