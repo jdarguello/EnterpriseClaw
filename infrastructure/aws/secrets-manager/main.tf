@@ -1,17 +1,23 @@
-data "aws_secretsmanager_secret" "innersource-webhook-secret" {
-  name = var.innersource_webhook_secret_name
+locals {
+  secrets_map = { for s in var.secrets_registries : s.name => s }
+  secret_arns = [for s in data.aws_secretsmanager_secret.secrets : s.arn]
 }
 
-module "webhook_policy" {
+data "aws_secretsmanager_secret" "secrets" {
+  for_each = local.secrets_map
+  name     = each.key
+}
+
+module "secrets_policy" {
   source = "terraform-aws-modules/iam/aws//modules/iam-policy"
 
-  name        = "webhook-policy"
+  name        = "secrets-policy"
   path        = "/"
-  description = "Permisos IAM que permite obtener valores del secreto del InnerSource-Webhook-Secret en Secrets Manager"
+  description = "IAM permissions to read secrets from Secrets Manager"
 
   policy = templatefile(
-    "${path.module}/policies/innersource_app_secret.tpl",
-    { secret_arn = data.aws_secretsmanager_secret.innersource-webhook-secret.arn }
+    "${path.module}/policies/secrets_policy.tpl",
+    { secret_arns = local.secret_arns }
   )
 
   tags = {
@@ -20,19 +26,19 @@ module "webhook_policy" {
   }
 }
 
-module "irsa-webhook" {
+module "irsa-secrets" {
   source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
 
-  name = "${var.eks_data.name}-webhook-secret"
+  name = "${var.cluster_name}-secrets"
 
   oidc_providers = {
-    innersource_app_oidc = {
-      provider_arn               = module.eks.oidc_provider_arn
+    cluster_oidc = {
+      provider_arn               = var.oidc_provider_arn
       namespace_service_accounts = ["argo-events:webhook"]
     }
   }
 
   policies = {
-    policy = module.webhook_policy.arn
+    policy = module.secrets_policy.arn
   }
 }

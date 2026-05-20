@@ -7,7 +7,7 @@
                 "secretsmanager:GetSecretValue",
                 "secretsmanager:DescribeSecret"
             ],
-            "Resource": "${secret_arn}"
+            "Resource": ${jsonencode(secret_arns)}
         }
     ]
 }

@@ -22,7 +22,11 @@ def --env "cluster aws setup tfvars" [
                     "url": $"events.($env.domain_name)"
                 }
             ]
-        }
+        },
+        "secrets_registries": [
+            {"name": $env.github_app_registry},
+            {"name": $env.github_webhook_registry}
+        ]
     } | save env.auto.tfvars.json --force
 }
 

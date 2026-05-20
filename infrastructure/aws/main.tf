@@ -33,3 +33,11 @@ module "dns" {
   cluster_name        = var.cluster_name
   oidc_provider_arn   = module.cluster.oidc_provider_arn
 }
+
+module "secrets-manager" {
+  source = "./secrets-manager"
+
+  cluster_name        = var.cluster_name
+  oidc_provider_arn   = module.cluster.oidc_provider_arn
+  secrets_registries  = var.secrets_registries
+}

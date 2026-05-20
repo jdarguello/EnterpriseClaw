@@ -36,3 +36,10 @@ variable "dns_data" {
     }))
   })
 }
+
+variable "secrets_registries" {
+    description = "References of secrets registries in AWS Secrets Manager"
+    type        = list(object({
+        name = string
+    }))
+}
