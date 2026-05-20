@@ -25,7 +25,7 @@ module "pipe-storage" {
 }
 
 module "dns" {
-  source "./dns"
+  source = "./dns"
 
   domain_name = var.dns_data.domain_name
   subdomains  = var.dns_data.subdomains
