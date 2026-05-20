@@ -20,7 +20,7 @@ module "cluster" {
 module "pipe-storage" {
   source = "./pipe-storage"
 
-  pipeline_storage_name = "${var.project}-artifacts-storage"
+  pipeline_storage_name = "${lower(var.project)}-artifacts-storage"
   project               = var.project
   oidc_provider_arn     = module.cluster.oidc_provider_arn
 }

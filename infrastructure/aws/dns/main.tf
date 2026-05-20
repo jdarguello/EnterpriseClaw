@@ -3,20 +3,6 @@ locals {
     for record_data in data.aws_route53_records.domain_records.resource_record_sets:
     record_data.name
   ]
-
-  all_domain_names = toset(concat(
-    [var.domain_name],
-    [for s in var.subdomains : s.url]
-  ))
-
-  acm_options = {
-    for dvo in module.acm.acm_certificate_domain_validation_options:
-    dvo.domain_name => {
-      name   = dvo.resource_record_name
-      type   = dvo.resource_record_type
-      record = dvo.resource_record_value
-    }
-  }
 }
 
 data "aws_route53_zone" "selected" {
@@ -26,17 +12,6 @@ data "aws_route53_zone" "selected" {
 
 data "aws_route53_records" "domain_records" {
   zone_id = data.aws_route53_zone.selected.zone_id
-}
-
-resource "aws_route53_record" "acm_config" {
-  depends_on = [module.acm]
-  for_each   = local.all_domain_names
-  zone_id    = data.aws_route53_zone.selected.zone_id
-  name       = local.acm_options[each.key].name
-  type       = local.acm_options[each.key].type
-
-  ttl     = 60
-  records = [local.acm_options[each.key].record]
 }
 
 
@@ -66,7 +41,7 @@ module "external_dns_policy" {
 
   name        = "external-dns-policy"
   path        = "/"
-  description = "Permisos IAM que External-DNS pueda configurar DNS Records"
+  description = "IAM Permissions for External-DNS to configure DNS Records"
 
   policy = file("${path.module}/policies/external_dns.json")
 
