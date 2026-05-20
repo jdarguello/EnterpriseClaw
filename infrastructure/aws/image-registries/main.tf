@@ -25,7 +25,7 @@ module "actions_registries" {
 
   for_each = toset(local.actions_names)
 
-  repository_name = "${var.project}/${each.value}"
+  repository_name = "${lower(var.project)}/${lower(each.value)}"
 
   repository_read_write_access_arns = [module.irsa-ecr-actions.arn]
   repository_lifecycle_policy = jsonencode({
