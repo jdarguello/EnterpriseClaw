@@ -5,7 +5,24 @@ def --env "cluster aws setup tfvars" [
     {
         "aws_region": $env.aws_region,
         "project": $"($env.COMPANY_NAME)-EnterpriseClaw",
-        "cluster_name": "EnterpriseClaw-cluster"
+        "cluster_name": "EnterpriseClaw-cluster",
+        "dns_data" : {
+            "domain_name": $env.domain_name,
+            "subdomains": [
+                {
+                    "name": $"gitops",
+                    "url": $"gitops.($env.domain_name)"
+                },
+                {
+                    "name": $"workflows",
+                    "url": $"workflows.($env.domain_name)"
+                },
+                {
+                    "name": $"events",
+                    "url": $"events.($env.domain_name)"
+                }
+            ]
+        }
     } | save env.auto.tfvars.json --force
 }
 

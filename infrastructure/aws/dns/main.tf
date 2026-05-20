@@ -15,7 +15,7 @@ locals {
 }
 
 data "aws_route53_zone" "selected" {
-  name         = var.dns_data.domain_name
+  name         = var.domain_name
   private_zone = false
 }
 
@@ -39,19 +39,19 @@ module "acm" {
   source  = "terraform-aws-modules/acm/aws"
   version = "~> 4.0"
 
-  domain_name = var.dns_data.domain_name
+  domain_name = var.domain_name
   zone_id     = data.aws_route53_zone.selected.zone_id
 
   validation_method = "DNS"
 
   subject_alternative_names = [
-    for subdomain in var.dns_data.subdomains:
+    for subdomain in var.subdomains:
     subdomain.url
   ]
 
   wait_for_validation = true
 
   tags = {
-    Name = var.dns_data.domain_name
+    Name = var.domain_name
   }
 }

@@ -25,3 +25,14 @@ variable "node_instance_types" {
   type        = list(string)
   default     = ["t3.medium"]
 }
+
+variable "dns_data" {
+  description = "Data to DNS usage"
+  type        = object({
+    domain_name   = string
+    subdomains    = list(object({
+      name  = string
+      url   = string
+    }))
+  })
+}

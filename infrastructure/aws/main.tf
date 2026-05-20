@@ -24,3 +24,9 @@ module "pipe-storage" {
   project               = var.project
 }
 
+module "dns" {
+  source "./dns"
+
+  domain_name = var.dns_data.domain_name
+  subdomains  = var.dns_data.subdomains
+}
