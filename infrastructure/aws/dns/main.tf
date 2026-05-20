@@ -4,6 +4,11 @@ locals {
     record_data.name
   ]
 
+  all_domain_names = toset(concat(
+    [var.domain_name],
+    [for s in var.subdomains : s.url]
+  ))
+
   acm_options = {
     for dvo in module.acm.acm_certificate_domain_validation_options:
     dvo.domain_name => {
@@ -25,13 +30,13 @@ data "aws_route53_records" "domain_records" {
 
 resource "aws_route53_record" "acm_config" {
   depends_on = [module.acm]
-  for_each = local.acm_options
-  zone_id = data.aws_route53_zone.selected.zone_id
-  name    = each.value.name
-  type    = each.value.type
+  for_each   = local.all_domain_names
+  zone_id    = data.aws_route53_zone.selected.zone_id
+  name       = local.acm_options[each.key].name
+  type       = local.acm_options[each.key].type
 
-  ttl = 60
-  records = [each.value.record]
+  ttl     = 60
+  records = [local.acm_options[each.key].record]
 }
 
 
