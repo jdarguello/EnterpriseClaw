@@ -17,8 +17,8 @@ export COMPANY_NAME="Your-Company"
 
 #AWS-creds 
 export AWS_ROLE="<aws-role>"
-export AWS_ACCESS_KEY_ID="AKIASJ3VPKNZ6LP3DHFO"
-export AWS_SECRET_ACCESS_KEY="bXAAvxX8D3j3ww9ftRobDU8VURxlMmIZJ5+n2lX4"
+export AWS_ACCESS_KEY_ID="babababsdjsdje"
+export AWS_SECRET_ACCESS_KEY="yeyeyeyeyey+n2lX55532ds"
 export AWS_SESSION_TOKEN="<session-token>"
 
 #Generals
