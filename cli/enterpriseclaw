@@ -3,6 +3,7 @@
 source infra/bootstrap.nu
 source infra/cluster.nu
 source cluster/connect.nu
+source kube-tools/pre-condition/main.nu
 
 def "main" [] {
     enterpriseclaw -h
@@ -10,13 +11,13 @@ def "main" [] {
 
 #Bootstrap method to accomodate EnterpriseClaw's infraestructure
 def --env "main init" [
-    --cloud-provider        = "aws"                         #Options: 'aws', 'azure' or 'gcp'
-    --cluster-name          = "enterpriseclaw"              #K8s cluster's name
+    --cloud-provider        = "aws"                 #Options: 'aws', 'azure' or 'gcp'
+    --cluster-name          = "enterpriseclaw"      #K8s cluster's name
 
-    --secret-provider       = "cloud"                       #Secret provider source. Options: 'cloud'. Support is available for: aws/secrets-manager
-    --git-provider          = "github"                      #Options: 'github', 'azure' or 'gitlab'
+    --secret-provider       = "cloud"               #Secret provider source. Options: 'cloud'. Support is available for: aws/secrets-manager
+    --git-provider          = "github"              #Options: 'github', 'azure' or 'gitlab'
 
-    --persistant-state      = false                          #If true, it will create a blob-storage and a NoSQL storage (DocumentDB/DynamoDB) to persist the tofu state
+    --persistant-state      = false                 #If true, it will create a blob-storage and a NoSQL storage (DocumentDB/DynamoDB) to persist the tofu state
 ] {
     #1. Setup Infra
     if ($secret_provider == "cloud") {  #Every resource can be managed with OpenTofu!
