@@ -1,11 +1,12 @@
 def --env "cluster aws setup tfvars" [
     --git-secret-name: string
     --webhook-secret-name: string
+    --cluster-name: string
 ] {
     {
-        "aws_region": $env.aws_region,
+        "aws_region": $env.region,
         "project": $"($env.COMPANY_NAME)-EnterpriseClaw",
-        "cluster_name": "EnterpriseClaw",
+        "cluster_name": $cluster_name,
         "dns_data" : {
             "domain_name": $env.domain_name,
             "subdomains": [
@@ -32,7 +33,7 @@ def --env "cluster aws setup tfvars" [
 
 def --env "cluster aws bootstrap tfvars" [] {
     {
-        "aws_region": $env.aws_region,
+        "aws_region": $env.region,
         "project": $"($env.COMPANY_NAME)-EnterpriseClaw",
         "bucket_name": $"($env.COMPANY_NAME)-EnterpriseClaw-state-storage",
         "dynamodb_table_name": $"($env.COMPANY_NAME)-EnterpriseClaw-state-lock"

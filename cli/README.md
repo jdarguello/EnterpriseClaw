@@ -13,6 +13,13 @@ If you intend to locally configure and test the CLI, whether to include new feat
 ```bash
 export COMPANY_NAME="Your-Company"
 
+#Generals
+export region="us-east-1"
+
+#Secrets registries
+export github_app_registry="<registry-name>"
+export github_webhook_registry="<registry-name>"
+
 #--------------------------------AWS-PROVIDER--------------------------------------------
 
 #AWS-creds 
@@ -21,7 +28,6 @@ export AWS_ACCESS_KEY_ID="babababsdjsdje"
 export AWS_SECRET_ACCESS_KEY="yeyeyeyeyey+n2lX55532ds"
 export AWS_SESSION_TOKEN="<session-token>"
 
-#Generals
-export aws_region="us-east-1"
+
 ```
 

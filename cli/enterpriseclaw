@@ -2,6 +2,7 @@
 
 source infra/bootstrap.nu
 source infra/cluster.nu
+source cluster/connect.nu
 
 def "main" [] {
     enterpriseclaw -h
@@ -10,7 +11,7 @@ def "main" [] {
 #Bootstrap method to accomodate EnterpriseClaw's infraestructure
 def --env "main init" [
     --cloud-provider        = "aws"                         #Options: 'aws', 'azure' or 'gcp'
-    --cluster-name          = "enterpriseclaw-cluster"      #K8s cluster's name
+    --cluster-name          = "enterpriseclaw"              #K8s cluster's name
 
     --secret-provider       = "cloud"                       #Secret provider source. Options: 'cloud'. Support is available for: aws/secrets-manager
     --git-provider          = "github"                      #Options: 'github', 'azure' or 'gitlab'
@@ -24,6 +25,13 @@ def --env "main init" [
         }
         main cluster setup --cloud-provider=$cloud_provider --cluster-name=$cluster_name --git-secret-name="($git_provider)-creds" --webhook-secret-name="($git_provider)-webhook-creds"
     }
+
+    #2. Connect to the cluster
+    main cluster connect --cloud-provider=$cloud_provider --region=$env.region --cluster-name=$cluster_name
+
+    #3. 
+
+
 }
 
 #Destroy all the created and configured infrastructure of the project! (Ideal for ephemeral environments)
