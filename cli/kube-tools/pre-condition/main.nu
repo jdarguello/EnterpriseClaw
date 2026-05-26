@@ -1,4 +1,4 @@
-source ../git/main.nu
+source ../../git/main.nu
 
 source alb-controller.nu
 
@@ -7,7 +7,12 @@ def "main preconditioning" [
     --git-provider: string
 ] {
     #1. Clone the config repository
-    git clone --git-provider=$git_provider
+    git-registry clone --git-provider=$git_provider
 
+    #2. Patch manifest files
     
+
+    #3. Push to registry
+
+
 }

@@ -33,10 +33,6 @@ def --env "main init" [
     #3. Connect to the cluster
     main cluster connect --cloud-provider=$cloud_provider --region=$env.region --cluster-name=$cluster_name
 
-    
-
-
-
 }
 
 #Destroy all the created and configured infrastructure of the project! (Ideal for ephemeral environments)

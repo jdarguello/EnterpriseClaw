@@ -1,7 +1,7 @@
 source github/main.nu
 
 # Git cloning
-def "git clone" [
+def "git-registry clone" [
     --git-provider: string      #Options: 'github'
 ] {
     if ($git_provider == "github") {
@@ -10,12 +10,12 @@ def "git clone" [
 }
 
 # Git push
-def "git push" [
+def "git-registry push" [
     --git-provider: string      #Options: 'github'
 ] {
     #1. cd to repository
     let current_directory = pwd
-    cd $"../infrastructure/($cloud_provider)"
+    cd $"../gitops-config"
 
     #2. Push operation
     if ($git_provider == "github") {
