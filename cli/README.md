@@ -20,6 +20,13 @@ export region="us-east-1"
 export github_app_registry="<registry-name>"
 export github_webhook_registry="<registry-name>"
 
+#Config Repo
+export CONFIG_REPO="<config-repo-name>" 
+export ORG_NAME="<org-name>"
+
+#GitHub Token
+export GH_TOKEN="<your-token>"
+
 #--------------------------------AWS-PROVIDER--------------------------------------------
 
 #AWS-creds 

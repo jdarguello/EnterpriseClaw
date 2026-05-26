@@ -27,10 +27,14 @@ def --env "main init" [
         main cluster setup --cloud-provider=$cloud_provider --cluster-name=$cluster_name --git-secret-name="($git_provider)-creds" --webhook-secret-name="($git_provider)-webhook-creds"
     }
 
-    #2. Connect to the cluster
+    #2. GitOps preconditioning
+    main preconditioning --git-provider=$git_provider
+
+    #3. Connect to the cluster
     main cluster connect --cloud-provider=$cloud_provider --region=$env.region --cluster-name=$cluster_name
 
-    #3. 
+    
+
 
 
 }
