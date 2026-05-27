@@ -1,0 +1,90 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: git-clone-template
+spec:
+  templates:
+  - name: github-app-clone
+    inputs:
+      parameters:
+        - name: github_repository               
+        - name: github_owner
+    outputs:
+      artifacts:
+        - name: repo
+          path: /workspace
+    volumes:
+    - name: workspace
+      emptyDir: {}
+    container:
+      name: clone
+      image: 271590248982.dkr.ecr.us-east-1.amazonaws.com/pipemanager/checkout:5.0.0
+      imagePullPolicy: Always
+      volumeMounts:
+      - name: workspace
+        mountPath: /workspace
+      command: ["sh","-c"]
+      args:
+      - |
+        #Obtener token
+        export INPUT_TOKEN="$(cat /workspace/token)"
+
+        #Ejecutar lógica principal
+        /entrypoint.sh
+      env:
+      - name: GITHUB_REPOSITORY
+        value: "{{inputs.parameters.github_repository}}"
+      - name: GITHUB_OWNER
+        value: "{{inputs.parameters.github_owner}}"
+      - name: GITHUB_REPOSITORY_OWNER
+        value: "{{inputs.parameters.github_owner}}"
+      - name: GITHUB_SERVER_URL
+        value: "https://github.com"
+      - name: GITHUB_GRAPHQL_URL
+        value: "https://api.github.com/graphql"
+      - name: GITHUB_WORKSPACE
+        value: /workspace
+      - name: RUNNER_TEMP
+        value: /workspace
+    initContainers:
+    - name: token-producer
+      image: 271590248982.dkr.ecr.us-east-1.amazonaws.com/pipemanager/create-github-app-token:2.1.4
+      imagePullPolicy: Always
+      command: ["sh","-c"]
+      args:
+      - |
+        set -euo pipefail
+        # Corre el action's entrypoint y almacena el log con los outputs
+        node main.js 2>&1 > /tmp/action.log
+
+        # Obtener token y almacenar en /workspace/token
+        grep -o '::set-output name=token::.*' /tmp/action.log \
+          | sed 's/.*::set-output name=token:://' > /workspace/token
+      volumeMounts:
+      - name: workspace
+        mountPath: /workspace
+      env:
+        - name: GITHUB_REPOSITORY
+          value: "{{inputs.parameters.github_repository}}"
+        - name: GITHUB_OWNER
+          value: "{{inputs.parameters.github_owner}}"
+        - name: GITHUB_REPOSITORY_OWNER
+          value: "{{inputs.parameters.github_owner}}"
+        - name: GITHUB_SERVER_URL
+          value: "https://github.com"
+        - name: GITHUB_GRAPHQL_URL
+          value: "https://api.github.com/graphql"
+        - name: INPUT_SKIP-TOKEN-REVOKE
+          value: "FALSE"
+        - name: INPUT_GITHUB-API-URL
+          value: "https://api.github.com"
+        - name: INPUT_APP-ID
+          valueFrom:
+            secretKeyRef:
+              name: github-app-secrets        
+              key: githubAppID
+        - name: INPUT_PRIVATE-KEY
+          valueFrom:
+            secretKeyRef:
+              name: github-app-secrets        
+              key: githubAppPrivateKey

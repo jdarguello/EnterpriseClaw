@@ -1,0 +1,9 @@
+aws-load-balancer-controller:
+  clusterName: pipemanager
+  region: us-east-1
+  vpcId: vpc-0d43032fc7d907177
+  serviceAccount:
+    create: true
+    name: aws-load-balancer-controller
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::271590248982:role/pipemanager-alb-controller-2025120818204032750000000f

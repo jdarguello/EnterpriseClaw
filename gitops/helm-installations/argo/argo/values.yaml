@@ -1,0 +1,6 @@
+argo-workflows:
+  namespaceOverride: argo
+  server:
+    secure: false
+    authModes:
+    - server

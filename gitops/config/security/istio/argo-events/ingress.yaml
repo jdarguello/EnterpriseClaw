@@ -1,0 +1,20 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}, {"HTTP":12000}]'
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/target-type: ip
+  finalizers:
+  - ingress.k8s.aws/resources
+  generation: 1
+  labels:
+    controller: eventsource-controller
+    eventsource-name: github
+    owner-name: github
+  name: argo-events-istio-ingress
+  namespace: istio-ingress
+spec:
+  ingressClassName: alb

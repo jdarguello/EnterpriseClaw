@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: github
+  namespace: argo-events
+spec:
+  service:
+    ports:
+      - name: git-push
+        port: 12000
+        targetPort: 12000
+  github:
+    all-events:
+      organizations:
+      - grupobancolombia-innersource
+      webhook:
+        url: events.devexp-bancol.com
+        endpoint: /payload
+        port: "12000"
+        method: POST
+      events:
+        - "push"
+      webhookSecret:
+        name: webhook-secret
+        key: secret-key
+      insecure: true
+      active: true
+      contentType: json
+      githubApp:
+        appID: 2214011                
+        installationID: 93026090    
+        privateKey:           
+          name: github-app-secrets
+          key: githubAppPrivateKey

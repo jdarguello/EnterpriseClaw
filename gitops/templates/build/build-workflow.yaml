@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: pipeline-build-
+  namespace: argo
+spec:
+  serviceAccountName: pipe-storage
+  entrypoint: pipeline-build
+  arguments:
+    parameters:
+      - name: github_repository               
+      - name: github_owner
+  templates:
+    - name: pipeline-build
+      dag:
+        tasks:
+          - name: clone
+            templateRef:
+              name: git-clone-template
+              template: github-app-clone
+              clusterScope: true
+            arguments:
+              parameters:
+                - name: github_repository
+                  value: "{{workflow.parameters.github_repository}}"
+                - name: github_owner
+                  value: "{{workflow.parameters.github_owner}}"

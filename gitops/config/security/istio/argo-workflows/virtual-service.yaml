@@ -1,0 +1,19 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: argo-workflows
+  namespace: argo
+spec:
+  hosts:
+    - workflows.host
+  gateways:
+    - istio-ingress/argo-workflows-gateway    # <ns>/<name>
+  http:
+    - match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            host: argo-argo-workflows-server.argo.svc.cluster.local
+            port:
+              number: 2746

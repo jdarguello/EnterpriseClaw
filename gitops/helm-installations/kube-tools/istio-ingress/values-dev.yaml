@@ -1,0 +1,3 @@
+gateway:
+  nodeSelector:
+    eks.amazonaws.com/nodegroup: backend-workers-20251208182115493900000014

@@ -1,0 +1,61 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: github-push
+  namespace: argo-events
+spec:
+  template:
+    serviceAccountName: default
+  dependencies:
+    - name: new-commit
+      eventSourceName: github
+      eventName: all-events
+      filters:
+        data:
+          - path: headers.X-Github-Event
+            type: string
+            value:
+              - push
+  triggers:
+    - template:
+        name: github-workflow-trigger
+        k8s:
+          operation: create
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: pipeline-build-
+                namespace: argo
+              spec:
+                serviceAccountName: pipe-storage
+                entrypoint: pipeline-build
+                arguments:
+                  parameters:
+                    - name: github_repository               
+                    - name: github_owner
+                templates:
+                  - name: pipeline-build
+                    dag:
+                      tasks:
+                        - name: clone
+                          templateRef:
+                            name: git-clone-template
+                            template: github-app-clone
+                            clusterScope: true
+                          arguments:
+                            parameters:
+                              - name: github_repository
+                                value: "{{workflow.parameters.github_repository}}"
+                              - name: github_owner
+                                value: "{{workflow.parameters.github_owner}}"
+          parameters:
+            - src:
+                dependencyName: new-commit
+                dataKey: body.repository.full_name
+              dest: spec.arguments.parameters.0.value
+            - src:
+                dependencyName: new-commit
+                dataKey: body.repository.owner.name
+              dest: spec.arguments.parameters.1.value

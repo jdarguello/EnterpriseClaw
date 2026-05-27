@@ -1,0 +1,10 @@
+external-dns:
+  policy: sync
+  txtOwnerId: pipemanager
+  provider:
+    name: aws
+  serviceAccount:
+    create: true
+    name: external-dns
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::271590248982:role/pipemanager-external-dns-2025120818204032740000000d
