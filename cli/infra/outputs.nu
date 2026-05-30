@@ -7,12 +7,12 @@ def --env "infra output" [
     let current_directory = pwd
     cd $"../infrastructure/($cloud_provider)"
 
-    #2. Capturar el valor
+    #2. Capture values
     let tofu_output = tofu output -json $output_name
 
-    #3. Retornar al path original
+    #3. Returns to original path
     cd $current_directory
 
-    #4. Retornar el valor
+    #4. Returns output
     return $tofu_output
 }

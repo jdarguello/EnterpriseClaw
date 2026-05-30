@@ -9,7 +9,7 @@ def --env "argocd bootstrap" [
     }
 
     #1. Instalar ArgoCD
-    argo cd install --environment=$environment --namespace=$namespace --opentofu-outputs=$opentofu_outputs
+    argo cd install --namespace=$namespace --infra-outputs=$infra_outputs
 }
 
 def --env "argocd install" [
@@ -17,17 +17,17 @@ def --env "argocd install" [
     --namespace: string
     --infra-outputs: record
 ] {
-    #0. Crear namespace
+    #0. Create namespace
     kubectl create ns $namespace
 
-    #2. Definición de variables de Instalación
+    #2. Define helm-vars
     argo cd helm vars --admin-enabled=$admin_enabled --namespace=$namespace --infra-outputs=$infra_outputs
 
-    #3. Instalación vía Helm
+    #3. Install with helm
     helm repo add argo https://argoproj.github.io/argo-helm
     helm install argo-cd argo/argo-cd --version $env.argocd_version -f tmp/argocd-vars.yaml
 
-    #4. Espera a que termine de configurar deployments
+    #4. Wait until it rollouts!
     kubectl -n argocd rollout status --watch --timeout=600s deployment/argo-cd-argocd-server
     kubectl -n argocd rollout status --watch --timeout=600s deployment.apps/argo-cd-argocd-repo-server
 }
