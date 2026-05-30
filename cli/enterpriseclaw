@@ -4,6 +4,7 @@ source infra/bootstrap.nu
 source infra/cluster.nu
 source cluster/connect.nu
 source kube-tools/pre-condition/main.nu
+source gitops/bootstrap.nu
 
 def "main" [] {
     enterpriseclaw -h
@@ -18,6 +19,7 @@ def --env "main init" [
     --git-provider          = "github"              #Options: 'github', 'azure' or 'gitlab'
 
     --persistant-state      = false                 #If true, it will create a blob-storage and a NoSQL storage (DocumentDB/DynamoDB) to persist the tofu state
+    --gitops-agent          = "argocd"              #Options: 'argocd'
 ] {
     #1. Setup Infra
     if ($secret_provider == "cloud") {  #Every resource can be managed with OpenTofu!
@@ -28,10 +30,13 @@ def --env "main init" [
     }
 
     #2. GitOps preconditioning
-    main preconditioning --git-provider=$git_provider
+    #main preconditioning --git-provider=$git_provider
 
     #3. Connect to the cluster
     main cluster connect --cloud-provider=$cloud_provider --region=$env.region --cluster-name=$cluster_name
+
+    #4. GitOps bootstrap
+    #main init gitops --gitops-agent=$gitops_agent
 
 }
 
