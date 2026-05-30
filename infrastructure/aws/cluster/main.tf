@@ -28,7 +28,7 @@ module "eks" {
 
   eks_managed_node_groups = {
     public = {
-      name           = "${var.cluster_name}"
+      name           = "frontend"
       instance_types = var.node_instance_types
 
       min_size     = 1
@@ -39,7 +39,7 @@ module "eks" {
     }
 
     private = {
-      name           = "${var.cluster_name}"
+      name           = "backend"
       instance_types = var.node_instance_types
 
       min_size     = 1

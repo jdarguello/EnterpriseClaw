@@ -1,19 +1,20 @@
 source ../../utils/generals.nu
 
-def --env "argo cd helm vars" [
-    --admin-enabled:    boolean
+def --env "argocd helm vars" [
+    --admin-enabled
     --namespace:        string
-    --infra-outputs: record
+    --infra-outputs:    record
+    --cloud-provider:   string
 ] {
 
     #1. Dynamic variables from IaC
-    let node_labels = k8s node-labels subnet-environments
+    let node_labels = k8s node-labels subnet-environments --cloud-provider=$cloud_provider
 
     #2. Helm vars
     {
         namespaceOverride: $namespace
         global: {
-            domain: $env.dns_data_gitops_url
+            domain: $"gitops.($env.domain_name)"
         }
         configs: {
             cm: {
@@ -63,7 +64,7 @@ def --env "argo cd helm vars" [
                     "alb.ingress.kubernetes.io/subnets": $infra_outputs.ingress_annotation_subnets
                     "alb.ingress.kubernetes.io/listen-ports": '[{"HTTPS":443}, {"HTTP":80}]'
                     "alb.ingress.kubernetes.io/ssl-redirect": '443'
-                    "external-dns.alpha.kubernetes.io/hostname": $env.dns_data_gitops_url
+                    "external-dns.alpha.kubernetes.io/hostname": $"gitops.($env.domain_name)"
                 }
                 aws: {
                     serviceType: ClusterIP

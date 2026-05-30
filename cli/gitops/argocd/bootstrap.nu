@@ -1,27 +1,31 @@
 source ../../infra/outputs.nu
 
+source helm-vars.nu 
+
 def --env "argocd bootstrap" [
     --namespace = "argocd"
+    --cloud-provider:string 
 ] {
     #0. Get subnets info!
     let infra_outputs = {
-        ingress_annotation_subnets: (opentofu output --environment=$environment --output-name=public-subnets | from json | str join ",")
+        ingress_annotation_subnets: (infra output --cloud-provider=$cloud_provider --output-name=public_subnet_ids | from json | str join ",")
     }
 
     #1. Instalar ArgoCD
-    argo cd install --namespace=$namespace --infra-outputs=$infra_outputs
+    argocd install --namespace=$namespace --infra-outputs=$infra_outputs --cloud-provider=$cloud_provider
 }
 
 def --env "argocd install" [
-    --admin-enabled = true
-    --namespace: string
-    --infra-outputs: record
+    --admin-enabled =   true
+    --namespace:        string
+    --infra-outputs:    record
+    --cloud-provider:   string
 ] {
     #0. Create namespace
     kubectl create ns $namespace
 
     #2. Define helm-vars
-    argo cd helm vars --admin-enabled=$admin_enabled --namespace=$namespace --infra-outputs=$infra_outputs
+    argocd helm vars --admin-enabled=$admin_enabled --namespace=$namespace --infra-outputs=$infra_outputs --cloud-provider=$cloud_provider
 
     #3. Install with helm
     helm repo add argo https://argoproj.github.io/argo-helm
