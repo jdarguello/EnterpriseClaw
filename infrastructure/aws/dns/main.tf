@@ -54,7 +54,7 @@ module "external_dns_policy" {
 module "irsa-alb" {
   source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
 
-  name = "${var.eks_data.name}-alb-controller"
+  name = "${var.cluster_name}-alb-controller"
 
   oidc_providers = {
     eks_oidc = {

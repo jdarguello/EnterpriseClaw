@@ -50,6 +50,10 @@ output "external_dns_arn" {
   value = module.dns.external_dns_arn
 }
 
+output "alb-arn" {
+  value = module.dns.alb-arn
+}
+
 # secrets-manager
 output "irsa-secrets-arn" {
   value = module.secrets-manager.irsa-secrets-arn

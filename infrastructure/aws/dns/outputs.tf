@@ -17,3 +17,7 @@ output "acm_options" {
 output "external_dns_arn" {
   value = module.irsa-external-dns.arn
 }
+
+output "alb-arn" {
+  value = module.irsa-alb.arn
+}
