@@ -2,7 +2,8 @@ source ../utils/generals.nu
 source ../infra/outputs.nu
 
 def "alb-controller bootstrap" [
-    --cloud-provider: string        #Options: 'aws'
+    --cloud-provider:   string        #Options: 'aws'
+    --gitops-helm-path: string
 ] {
     #1. Load IaC Outputs!
     let infra_outputs = {
@@ -14,12 +15,12 @@ def "alb-controller bootstrap" [
     }
 
     #2. Patch Controller Config file
-    alb-controller patch helm-vars --infra-outputs=$infra_outputs
+    alb-controller patch helm-vars --infra-outputs=$infra_outputs --gitops-path=$gitops_helm_path
 }
 
 def "alb-controller patch helm-vars" [
-    infra-outputs: record
-    gitops-path = "gitops-config/helm"
+    infra-outputs:  record
+    gitops-path:    string
 ] {
     #1. Set helm-vars file path
     let path = $"($gitops_path)/kube-essentials/alb-controller/values.yaml"

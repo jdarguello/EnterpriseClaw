@@ -34,7 +34,7 @@ def --env "main init" [
     }
 
     #2. GitOps and Kube-tools preconditioning 
-    main kube-tools bootstrap --git-provider=$git_provider
+    main kube-tools bootstrap --git-provider=$git_provider --gitops-setup=$gitops_setup
 
     #3. Connect to the cluster
     main cluster connect --cloud-provider=$cloud_provider --region=$env.region --cluster-name=$"($cluster_name)-cluster"

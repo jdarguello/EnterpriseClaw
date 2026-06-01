@@ -2,22 +2,23 @@ source ../utils/generals.nu
 source ../infra/outputs.nu
 
 def "external-dns bootstrap" [
-    --cloud-provider: string        #Options: 'aws'
+    --cloud-provider:   string        #Options: 'aws'
+    --gitops-helm-path: string
 ] {
     #1. Load IaC Outputs!
     let infra_outputs = {
-        clusterName: (infra output --output-name=eks_name --environment=$environment | str trim -c '"'),
+        clusterName: (infra output --output-name=eks_name --cloud-provider=$cloud_provider | str trim -c '"'),
         serviceAccountName: "external-dns",
-        saAnnotation: (infra output --output-name=external_dns_arn --environment=$environment | str trim -c '"')
+        saAnnotation: (infra output --output-name=external_dns_arn --cloud-provider=$cloud_provider | str trim -c '"')
     }
 
     #2. Patch External-DNS Config file
-    external-dns patch helm-vars --infra-outputs=$infra_outputs
+    external-dns patch helm-vars --infra-outputs=$infra_outputs --gitops-path=$gitops_helm_path
 }
 
 def "external-dns patch helm-vars" [
-    infra-outputs: record
-    gitops-path = "gitops-config/helm"
+    infra-outputs:  record
+    gitops-path:    string
 ] {
     #1. Define helm-vars path
     let path = $"($gitops_path)/kube-essentials/external-dns/values.yaml"

@@ -6,6 +6,8 @@ source alb-controller.nu
 def "main kube-tools preconditioning" [
     --git-provider:     string
     --cloud-provider:   string
+    --gitops-setup:     string
+    --gitops-helm-path= "gitops-config/helm
 ] {
     #0. Delete any historic repository
     rm -rf gitops-config/
@@ -16,7 +18,10 @@ def "main kube-tools preconditioning" [
     #2. Patch manifest files
     alb-controller bootstrap --cloud-provider=$cloud_provider
     external-dns bootstrap --cloud-provider=$cloud_provider
+    istio bootstrap --gitops-helm-path=$gitops_helm_path
 
     #3. Push to registry
-    git-registry push --git-provider=$git_provider --commit-message="gitops: identifier patches"
+    if ($gitops_setup == "push") {
+        git-registry push --git-provider=$git_provider --commit-message="gitops: identifier patches"
+    }
 }
