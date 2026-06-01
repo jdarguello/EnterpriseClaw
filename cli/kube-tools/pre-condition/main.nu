@@ -18,6 +18,5 @@ def "main kube-tools preconditioning" [
     external-dns bootstrap --cloud-provider=$cloud_provider
 
     #3. Push to registry
-
-
+    git-registry push --git-provider=$git_provider --commit-message="gitops: identifier patches"
 }

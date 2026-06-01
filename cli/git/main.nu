@@ -10,18 +10,38 @@ def "git-registry clone" [
 }
 
 # Git push
-def "git-registry push" [
-    --git-provider: string      #Options: 'github'
+def --env "git-registry push" [
+    --git-provider:     string
+    --commit-message:   string
 ] {
     #1. cd to repository
     let current_directory = pwd
     cd $"../gitops-config"
 
     #2. Push operation
-    if ($git_provider == "github") {
-        github push
-    }
-
+    git-registry push operation --branch-name=$env.branch_name --commit-message=$commit_message
+    
     #3. Return to original path
     cd $current_directory
+}
+
+def "git-registry push operation" [
+    --branch-name:      string
+    --commit-message:   string
+] {
+    #1. User definition
+    git config user.name $env.GIT_USER
+    git config user.email $env.GIT_USER_EMAIL
+
+    #2. add commit
+    git add .
+    git commit -m $"($commit_message)
+
+    #3. push
+    git push origin $branch_name
+}
+
+# PR
+def "git-registry pr" [] {
+    
 }
