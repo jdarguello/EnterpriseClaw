@@ -34,7 +34,7 @@ module "irsa-secrets" {
   oidc_providers = {
     cluster_oidc = {
       provider_arn               = var.oidc_provider_arn
-      namespace_service_accounts = ["argo-events:webhook"]
+      namespace_service_accounts = ["argo-events:webhook", "argocd:git-sa", "external-secrets:git-sa"]
     }
   }
 

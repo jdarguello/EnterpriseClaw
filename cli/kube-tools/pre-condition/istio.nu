@@ -1,5 +1,4 @@
 source ../utils/generals.nu
-source ../infra/outputs.nu
 
 def "istio bootstrap" [
     --gitops-helm-path:     string

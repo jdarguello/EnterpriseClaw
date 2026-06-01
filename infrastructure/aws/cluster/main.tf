@@ -36,6 +36,18 @@ module "eks" {
       desired_size = 1
 
       subnet_ids = var.public_subnet_ids
+
+      labels = {
+        role = "frontend"
+      }
+
+      taints = {
+        frontend = {
+          key    = "role"
+          value  = "frontend"
+          effect = "NO_SCHEDULE"
+        }
+      }
     }
 
     private = {
@@ -47,6 +59,10 @@ module "eks" {
       desired_size = 2
 
       subnet_ids = var.private_subnet_ids
+
+      labels = {
+        role = "backend"
+      }
     }
   }
 

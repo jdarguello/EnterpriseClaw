@@ -1,13 +1,15 @@
 source ../../git/main.nu
 
 source alb-controller.nu
+source external-dns.nu
+source istio.nu
 
 # Configures GitOps manifests with infrastructure data for correct DNS, ALB and Gateway Controllers setup
 def "main kube-tools preconditioning" [
     --git-provider:     string
     --cloud-provider:   string
     --gitops-setup:     string
-    --gitops-helm-path= "gitops-config/helm
+    --gitops-helm-path= "gitops-config/helm"
 ] {
     #0. Delete any historic repository
     rm -rf gitops-config/
@@ -16,8 +18,9 @@ def "main kube-tools preconditioning" [
     git-registry clone --git-provider=$git_provider
 
     #2. Patch manifest files
-    alb-controller bootstrap --cloud-provider=$cloud_provider
-    external-dns bootstrap --cloud-provider=$cloud_provider
+    external-secrets bootstrap --cloud-provider=$cloud_provider --gitops-helm-path=$gitops_helm_path
+    alb-controller bootstrap --cloud-provider=$cloud_provider --gitops-helm-path=$gitops_helm_path
+    external-dns bootstrap --cloud-provider=$cloud_provider --gitops-helm-path=$gitops_helm_path
     istio bootstrap --gitops-helm-path=$gitops_helm_path
 
     #3. Push to registry
