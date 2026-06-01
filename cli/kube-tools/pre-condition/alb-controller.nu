@@ -1,4 +1,5 @@
-source utils/generals.nu
+source ../utils/generals.nu
+source ../infra/outputs.nu
 
 def "alb-controller bootstrap" [
     --cloud-provider: string        #Options: 'aws'
@@ -13,7 +14,7 @@ def "alb-controller bootstrap" [
     }
 
     #2. Patch Controller Config file
-    alb-controller patch helm-vars --tofu-outputs=$tofu_outputs
+    alb-controller patch helm-vars --infra-outputs=$infra_outputs
 }
 
 def "alb-controller patch helm-vars" [

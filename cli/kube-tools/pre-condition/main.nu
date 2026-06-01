@@ -15,6 +15,7 @@ def "main kube-tools preconditioning" [
 
     #2. Patch manifest files
     alb-controller bootstrap --cloud-provider=$cloud_provider
+    external-dns bootstrap --cloud-provider=$cloud_provider
 
     #3. Push to registry
 

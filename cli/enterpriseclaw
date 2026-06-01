@@ -20,6 +20,7 @@ def --env "main init" [
 
     --persistant-state      = false                 #If true, it will create a blob-storage and a NoSQL storage (DocumentDB/DynamoDB) to persist the tofu state
     --gitops-agent          = "argocd"              #Options: 'argocd'
+    --gitops-setup          = "push"                #Options: "push", "pull". If 'push', it will directly push to the GitOps repository. If 'pull', it will create a temporary branch and fill a Pull-Request.
 ] {
     #0. Prerrequisites
     mkdir tmp   //<= temporary directory
@@ -38,7 +39,7 @@ def --env "main init" [
     #3. Connect to the cluster
     main cluster connect --cloud-provider=$cloud_provider --region=$env.region --cluster-name=$"($cluster_name)-cluster"
 
-    #4. GitOps bootstrap
+    #4. GitOps initializer
     main init gitops --gitops-agent=$gitops_agent --cloud-provider=$cloud_provider
 
 }
