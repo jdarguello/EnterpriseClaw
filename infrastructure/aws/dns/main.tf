@@ -51,6 +51,23 @@ module "external_dns_policy" {
   }
 }
 
+module "irsa-alb" {
+  source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+
+  name = "${var.eks_data.name}-alb-controller"
+
+  oidc_providers = {
+    eks_oidc = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["kube-system:aws-load-balancer-controller", "alb-controller:aws-load-balancer-controller"]
+    }
+  }
+
+  policies = {
+    policy = module.eks_alb_policy.arn
+  }
+}
+
 module "irsa-external-dns" {
   source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
 
