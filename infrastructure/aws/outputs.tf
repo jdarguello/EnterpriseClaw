@@ -55,8 +55,8 @@ output "alb-arn" {
 }
 
 # secrets-manager
-output "irsa-secrets-arn" {
-  value = module.secrets-manager.irsa-secrets-arn
+output "secrets-arn" {
+  value = module.secrets-manager.secrets-arn
 }
 
 # image-registries
