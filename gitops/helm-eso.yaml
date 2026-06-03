@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: helm-eso
+  namespace: argocd
+spec:
+  generators:
+    - git:
+        repoURL: "https://github.com/jdarguello/EnterpriseClaw"
+        revision: main
+        directories:
+          - path: gitops/helm/kube-essentials/external-secrets
+
+  template:
+    metadata:
+      name: "helm-{{path.basename}}"
+      labels:
+        app.kubernetes.io/name: "{{path.basename}}"
+
+    spec:
+      project: default
+
+      source:
+        repoURL: "https://github.com/jdarguello/EnterpriseClaw"
+        targetRevision: main
+        path: "{{path}}"
+
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: argocd
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
