@@ -29,7 +29,7 @@ def --env "argocd install" [
 
     #3. Install with helm
     helm repo add argo https://argoproj.github.io/argo-helm
-    helm install argo-cd argo/argo-cd --version $env.argocd_version -f tmp/argocd-vars.yaml
+    helm install argo-cd argo/argo-cd --version $env.argocd_version -f ($nu.temp-dir + "/argocd-vars.yaml")
 
     #4. Wait until it rollouts!
     kubectl -n argocd rollout status --watch --timeout=600s deployment/argo-cd-argocd-server

@@ -1,5 +1,5 @@
-source ../utils/generals.nu
-source ../infra/outputs.nu
+source ../../utils/generals.nu
+source ../../infra/outputs.nu
 
 def "alb-controller bootstrap" [
     --cloud-provider:   string        #Options: 'aws'
@@ -19,8 +19,8 @@ def "alb-controller bootstrap" [
 }
 
 def "alb-controller patch helm-vars" [
-    infra-outputs:  record
-    gitops-path:    string
+    --infra-outputs:  record
+    --gitops-path:    string
 ] {
     #1. Set helm-vars file path
     let path = $"($gitops_path)/kube-essentials/alb-controller/values.yaml"

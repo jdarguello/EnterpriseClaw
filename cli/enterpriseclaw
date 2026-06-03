@@ -3,7 +3,7 @@
 source infra/bootstrap.nu
 source infra/cluster.nu
 source cluster/connect.nu
-source kube-tools/pre-condition/main.nu
+source kube-tools/bootstrap.nu
 source gitops/bootstrap.nu
 
 def "main" [] {
@@ -22,9 +22,6 @@ def --env "main init" [
     --gitops-agent          = "argocd"              #Options: 'argocd'
     --gitops-setup          = "push"                #Options: "push", "pull". If 'push', it will directly push to the GitOps repository. If 'pull', it will create a temporary branch and fill a Pull-Request.
 ] {
-    #0. Prerrequisites
-    mkdir tmp   //<= temporary directory
-
     #1. Setup Infra
     if ($secret_provider == "cloud") {  #Every resource can be managed with OpenTofu!
         if ($persistant_state) {
@@ -34,7 +31,7 @@ def --env "main init" [
     }
 
     #2. GitOps and Kube-tools preconditioning 
-    main kube-tools bootstrap --git-provider=$git_provider --gitops-setup=$gitops_setup
+    main kube-tools bootstrap --git-provider=$git_provider --gitops-setup=$gitops_setup --cloud-provider=$cloud_provider
 
     #3. Connect to the cluster
     main cluster connect --cloud-provider=$cloud_provider --region=$env.region --cluster-name=$"($cluster_name)-cluster"

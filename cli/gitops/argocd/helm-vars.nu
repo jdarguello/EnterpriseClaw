@@ -72,5 +72,5 @@ def --env "argocd helm vars" [
                 }
             }
         }
-    } | to yaml | save tmp/argocd-vars.yaml --force
+    } | to yaml | save ($nu.temp-dir + "/argocd-vars.yaml") --force
 }

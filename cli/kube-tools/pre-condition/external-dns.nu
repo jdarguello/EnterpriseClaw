@@ -1,5 +1,5 @@
-source ../utils/generals.nu
-source ../infra/outputs.nu
+source ../../utils/generals.nu
+source ../../infra/outputs.nu
 
 def "external-dns bootstrap" [
     --cloud-provider:   string        #Options: 'aws'
@@ -17,8 +17,8 @@ def "external-dns bootstrap" [
 }
 
 def "external-dns patch helm-vars" [
-    infra-outputs:  record
-    gitops-path:    string
+    --infra-outputs:  record
+    --gitops-path:    string
 ] {
     #1. Define helm-vars path
     let path = $"($gitops_path)/kube-essentials/external-dns/values.yaml"
