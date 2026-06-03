@@ -35,13 +35,8 @@ def "git-registry push operation" [
 
     #2. add commit
     git add .
-    git commit -m $"($commit_message)
+    git commit -m $"($commit_message)"
 
     #3. push
     git push origin $branch_name
-}
-
-# PR
-def "git-registry pr" [] {
-    
 }
