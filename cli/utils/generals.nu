@@ -16,7 +16,7 @@ def "k8s node-labels subnet-environments" [
 #Returns relative path as global. For instance: 'tmp/example.txt' converts it to '/Users/nicholas/Documents/EnterpriseClaw/cli/tmp/example.txt'
 def "abs-path" [
     --path: string      #Relative path
-    --replace-argument = "/EnterpriseClaw/cli
+    --replace-argument = "/EnterpriseClaw/cli"
 ] {
     return (pwd | str replace $replace_argument "" | append $path | str join "/")
 }

@@ -5,6 +5,17 @@ def "main init gitops" [
     --cloud-provider:   string
 ] {
     if ($gitops_agent == "argocd") {
-        argocd bootstrap --cloud-provider=$cloud_provider
+        main init gitops argocd --cloud-provider=$cloud_provider
     }
+}
+
+def "main init gitops argocd" [
+    --cloud-provider:   string
+] {
+    #1. Install Argo CD using Helm
+    argocd bootstrap --cloud-provider=$cloud_provider
+
+    #2. Install External-Secrets Operator (ESO)!
+    external-secrets bootstrap
+
 }

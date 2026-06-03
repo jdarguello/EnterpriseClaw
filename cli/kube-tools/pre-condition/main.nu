@@ -18,7 +18,7 @@ def "main kube-tools preconditioning" [
     git-registry clone --git-provider=$git_provider
 
     #2. Patch manifest files
-    external-secrets bootstrap --cloud-provider=$cloud_provider --gitops-helm-path=$gitops_helm_path
+    #external-secrets bootstrap --cloud-provider=$cloud_provider --gitops-helm-path=$gitops_helm_path
     alb-controller bootstrap --cloud-provider=$cloud_provider --gitops-helm-path=$gitops_helm_path
     external-dns bootstrap --cloud-provider=$cloud_provider --gitops-helm-path=$gitops_helm_path
     istio bootstrap --gitops-helm-path=$gitops_helm_path
