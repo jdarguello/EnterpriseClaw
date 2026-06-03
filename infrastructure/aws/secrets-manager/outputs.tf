@@ -1,3 +1,3 @@
-output "irsa-secrets-arn" {
-  value = module.irsa-secrets.arn
+output "secrets-arn" {
+  value = module.secrets_pod_identity.iam_role_arn
 }

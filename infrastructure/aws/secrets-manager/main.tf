@@ -26,19 +26,39 @@ module "secrets_policy" {
   }
 }
 
-module "irsa-secrets" {
-  source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+module "secrets_pod_identity" {
+  source  = "terraform-aws-modules/eks-pod-identity/aws"
+  version = "~> 2.0"   # ← verify current major on the registry before applying
 
   name = "${var.cluster_name}-secrets"
 
-  oidc_providers = {
-    cluster_oidc = {
-      provider_arn               = var.oidc_provider_arn
-      namespace_service_accounts = ["argo-events:webhook", "argocd:git-sa", "external-secrets:git-sa"]
+  # same policy ARN as before, attached via additional_policy_arns
+  additional_policy_arns = {
+    secrets = module.secrets_policy.arn
+  }
+
+  # set cluster_name once instead of repeating it per association
+  association_defaults = {
+    cluster_name = var.cluster_name
+  }
+
+  associations = {
+    argo-events-webhook = {
+      namespace       = "argo-events"
+      service_account = "webhook"
+    }
+    argocd-git-sa = {
+      namespace       = "argocd"
+      service_account = "git-sa"
+    }
+    external-secrets-git-sa = {
+      namespace       = "external-secrets"
+      service_account = "git-sa"
     }
   }
 
-  policies = {
-    policy = module.secrets_policy.arn
+  tags = {
+    OpenTofu    = "true"
+    Environment = "dev"
   }
 }
