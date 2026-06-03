@@ -16,12 +16,17 @@ def --env "git-registry push" [
 ] {
     #1. cd to repository
     let current_directory = pwd
-    cd $"../gitops-config"
+    cd gitops-config/
 
-    #2. Push operation
+    #2. Set git-credentials
+    if ($git_provider == "github") {
+        github auth config
+    }
+
+    #3. Push operation
     git-registry push operation --branch-name=$env.branch_name --commit-message=$commit_message
     
-    #3. Return to original path
+    #4. Return to original path
     cd $current_directory
 }
 
