@@ -1,12 +1,11 @@
-external-secrets:
-  global:
-    nodeSelector:
-      role: backend
+global:
   nodeSelector:
-      role: backend
-  webhook:
-    nodeSelector:
-      role: backend
-  certController:
-    nodeSelector:
-      role: backend
+    role: backend
+nodeSelector:
+  role: backend
+webhook:
+  nodeSelector:
+    role: backend
+certController:
+  nodeSelector:
+    role: backend
