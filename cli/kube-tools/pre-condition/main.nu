@@ -21,7 +21,7 @@ def "main kube-tools preconditioning" [
     #external-secrets bootstrap --cloud-provider=$cloud_provider --gitops-helm-path=$gitops_helm_path
     alb-controller bootstrap --cloud-provider=$cloud_provider --gitops-helm-path=$gitops_helm_path
     external-dns bootstrap --cloud-provider=$cloud_provider --gitops-helm-path=$gitops_helm_path
-    istio bootstrap --gitops-helm-path=$gitops_helm_path
+    istio bootstrap --cloud-provider=$cloud_provider --gitops-helm-path=$gitops_helm_path
 
     #3. Push to registry
     if ($gitops_setup == "push") {

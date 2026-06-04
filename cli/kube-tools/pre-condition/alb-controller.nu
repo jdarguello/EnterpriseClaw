@@ -9,7 +9,7 @@ def "alb-controller bootstrap" [
     let infra_outputs = {
         clusterName: (infra output --output-name=cluster_name --cloud-provider=$cloud_provider | str trim -c '"'),
         serviceAccountName: "aws-load-balancer-controller",
-        region: ($env.aws_region | str trim -c '"')
+        region: ($env.region | str trim -c '"')
         vpcId: (infra output --output-name=vpc_id --cloud-provider=$cloud_provider | str trim -c '"'),
         saAnnotation: (infra output --output-name=alb-arn --cloud-provider=$cloud_provider | str trim -c '"')
     }
@@ -24,7 +24,7 @@ def "alb-controller patch helm-vars" [
 ] {
     #1. Set helm-vars file path
     let path = $"($gitops_path)/kube-essentials/alb-controller/values.yaml"
-    let abs_path = abs-path --path=$path
+    let abs_path = abs-path --path=$path --replace-argument=""
 
     #2. Generate Helm vars
     {

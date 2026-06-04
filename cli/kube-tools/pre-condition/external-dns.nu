@@ -7,7 +7,7 @@ def "external-dns bootstrap" [
 ] {
     #1. Load IaC Outputs!
     let infra_outputs = {
-        clusterName: (infra output --output-name=eks_name --cloud-provider=$cloud_provider | str trim -c '"'),
+        clusterName: (infra output --output-name=cluster_name --cloud-provider=$cloud_provider | str trim -c '"'),
         serviceAccountName: "external-dns",
         saAnnotation: (infra output --output-name=external_dns_arn --cloud-provider=$cloud_provider | str trim -c '"')
     }
@@ -22,7 +22,7 @@ def "external-dns patch helm-vars" [
 ] {
     #1. Define helm-vars path
     let path = $"($gitops_path)/kube-essentials/external-dns/values.yaml"
-    let abs_path = abs-path --path=$path
+    let abs_path = abs-path --path=$path --replace-argument=""
 
     #2. Generar Helm vars
     {

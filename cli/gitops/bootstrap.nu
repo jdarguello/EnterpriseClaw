@@ -1,4 +1,5 @@
 source argocd/bootstrap.nu
+source external-secrets/bootstrap.nu
 
 def "main init gitops" [
     --gitops-agent:     string
