@@ -10,7 +10,7 @@ def --env "argocd helm vars" [
     #1. Dynamic variables from IaC
     let node_labels = k8s node-labels subnet-environments --cloud-provider=$cloud_provider
 
-    #2. Helm vars
+    #2. Helm vars - ETIQUETA DE FRONTEND!
     {
         namespaceOverride: $namespace
         global: {
@@ -42,16 +42,19 @@ def --env "argocd helm vars" [
         notifications: {
             nodeSelector: {
                 "eks.amazonaws.com/nodegroup": ($node_labels | get frontend)
+                "role": "frontend"
             }
         }
         repoServer: {
             nodeSelector: {
                 "eks.amazonaws.com/nodegroup": ($node_labels | get frontend)
+                "role": "frontend"
             }
         }
         server: {
             nodeSelector: {
                 "eks.amazonaws.com/nodegroup": ($node_labels | get frontend)
+                "role": "frontend"
             }
             ingress: {
                 enabled: false
