@@ -34,7 +34,13 @@ module "dns" {
   oidc_provider_arn   = module.cluster.oidc_provider_arn
 }
 
+resource "time_sleep" "wait_for_cluster" {
+  depends_on      = [module.cluster]
+  create_duration = "60s"
+}
+
 module "secrets-manager" {
+  depends_on = [time_sleep.wait_for_cluster]
   source = "./secrets-manager"
 
   cluster_name        = var.cluster_name
