@@ -28,32 +28,47 @@ def --env "argocd helm vars" [
             nodeSelector: {
                 "eks.amazonaws.com/nodegroup": ($node_labels | get backend)
             }
+            podLabels: {
+                "role": "backend"
+            }
         }
         applicationSet: {
             nodeSelector: {
                 "eks.amazonaws.com/nodegroup": ($node_labels | get backend)
+            }
+            podLabels: {
+                "role": "backend"
             }
         }
         redis: {
             nodeSelector: {
                 "eks.amazonaws.com/nodegroup": ($node_labels | get backend)
             }
+            podLabels: {
+                "role": "backend"
+            }
         }
         notifications: {
             nodeSelector: {
                 "eks.amazonaws.com/nodegroup": ($node_labels | get frontend)
+            }
+            podLabels: {
                 "role": "frontend"
             }
         }
         repoServer: {
             nodeSelector: {
                 "eks.amazonaws.com/nodegroup": ($node_labels | get frontend)
+            }
+            podLabels: {
                 "role": "frontend"
             }
         }
         server: {
             nodeSelector: {
                 "eks.amazonaws.com/nodegroup": ($node_labels | get frontend)
+            }
+            podLabels: {
                 "role": "frontend"
             }
             ingress: {
