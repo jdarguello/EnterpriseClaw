@@ -39,7 +39,7 @@ module "secrets_pod_identity" {
 
   # set cluster_name once instead of repeating it per association
   association_defaults = {
-    cluster_name = var.cluster_name
+    cluster_name = "${var.cluster_name}-cluster"
   }
 
   associations = {
