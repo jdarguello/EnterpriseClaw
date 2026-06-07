@@ -50,18 +50,18 @@ def --env "argocd helm vars" [
         }
         notifications: {
             nodeSelector: {
-                "eks.amazonaws.com/nodegroup": ($node_labels | get frontend)
+                "eks.amazonaws.com/nodegroup": ($node_labels | get backend)
             }
             podLabels: {
-                "role": "frontend"
+                "role": "backend"
             }
         }
         repoServer: {
             nodeSelector: {
-                "eks.amazonaws.com/nodegroup": ($node_labels | get frontend)
+                "eks.amazonaws.com/nodegroup": ($node_labels | get backend)
             }
             podLabels: {
-                "role": "frontend"
+                "role": "backend"
             }
         }
         server: {
@@ -71,6 +71,14 @@ def --env "argocd helm vars" [
             podLabels: {
                 "role": "frontend"
             }
+            tolerations: [
+                {
+                    key: "role"
+                    operator: "Equal"
+                    value: "frontend"
+                    effect: "NoSchedule"
+                }
+            ]
             ingress: {
                 enabled: false
                 ingressClassName: alb

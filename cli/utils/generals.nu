@@ -20,3 +20,18 @@ def "abs-path" [
 ] {
     return (pwd | str replace $replace_argument "" | append $path | str join "/")
 }
+
+# List files from a path
+def "list-files" [
+    --path:         string
+    --filter-format="yaml|yml"     #When specified, it will only bring files from this format. You can concat different file formats using '|' operator.
+] {
+    #1. Absolute path
+    let abs_path = abs-path --path=$path --replace-argument=""
+
+    #2. Get filters
+    let filters = ($filter_format | split row "|")
+
+    #3. List files matching any filter
+    return ((ls $abs_path | where type == "file" | where { |f| ($filters | any { |ext| ($f.name | str ends-with $".($ext)") }) }) | get name)
+}
