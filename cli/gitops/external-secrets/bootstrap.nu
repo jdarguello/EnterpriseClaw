@@ -11,9 +11,15 @@ def "external-secrets bootstrap" [] {
 
 #Configures External-Secrets Operator (ESO) with user's 
 def "external-secrets bootstrap config" [
-    --private-path="gitops-config/helm/kube-essentials/
+    --private-path="gitops-config/helm/kube-essentials/external-secrets/git-creds/"    #Private config from user's private repository.
 ] {
-    #1. Change directory to private configuration
+    #1. Get private config
+    let manifest_files = list-files --path=$private_path --except-filenames="kustomization.yaml"
+
+    #2. Create k8s objects
+    for $file in $manifest_files {
+        kubectl apply -f $file
+    }
 }
 
 def "external-secrets bootstrap gitops" [] {

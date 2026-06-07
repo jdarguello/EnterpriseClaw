@@ -23,8 +23,9 @@ def "abs-path" [
 
 # List files from a path
 def "list-files" [
-    --path:         string
-    --filter-format="yaml|yml"     #When specified, it will only bring files from this format. You can concat different file formats using '|' operator.
+    --path:             string      
+    --except-filenames:  string         #When specified, it will pop any file with this name from the result. You can concat several filenames using the '|' operator.
+    --filter-format=    "yaml|yml"      #When specified, it will only bring files from this format. You can concat different file formats using '|' operator.
 ] {
     #1. Absolute path
     let abs_path = abs-path --path=$path --replace-argument=""
@@ -33,5 +34,12 @@ def "list-files" [
     let filters = ($filter_format | split row "|")
 
     #3. List files matching any filter
-    return ((ls $abs_path | where type == "file" | where { |f| ($filters | any { |ext| ($f.name | str ends-with $".($ext)") }) }) | get name)
+    let files = (ls $abs_path | where type == "file" | where { |f| ($filters | any { |ext| ($f.name | str ends-with $".($ext)") }) } | get name)
+
+    #4. Exclude by filename if provided
+    if ($except_filenames != null) {
+        let excluded = ($except_filenames | split row "|")
+        return ($files | where { |f| not ($excluded | any { |name| ($f | str ends-with $"/($name)") }) })
+    }
+    return $files
 }

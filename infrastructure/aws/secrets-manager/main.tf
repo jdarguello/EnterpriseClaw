@@ -55,6 +55,10 @@ module "secrets_pod_identity" {
       namespace       = "external-secrets"
       service_account = "git-sa"
     }
+    external-secrets-controller = {
+      namespace       = "external-secrets"
+      service_account = "external-secrets"
+    }
   }
 
   tags = {
