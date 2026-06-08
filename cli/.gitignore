@@ -2,3 +2,5 @@
 
 gitops-config/
 tmp/
+
+github-app-key.pem
