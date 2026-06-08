@@ -1,3 +1,4 @@
+source ../../infra/outputs.nu
 source patches.nu
 
 #Service mesh (Istio) configuration for every component of the framework. Configures Virtual Service, Istio Gateway and Ingress Gateway
