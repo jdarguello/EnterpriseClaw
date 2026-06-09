@@ -1,3 +1,5 @@
+source argo/workflows/bootstrap.nu
+
 source alb-controller.nu
 source external-dns.nu
 source istio.nu
@@ -13,4 +15,7 @@ def "main kube-tools preconditioning" [
     alb-controller bootstrap --cloud-provider=$cloud_provider --gitops-helm-path=$gitops_helm_path
     external-dns bootstrap --cloud-provider=$cloud_provider --gitops-helm-path=$gitops_helm_path
     istio bootstrap --cloud-provider=$cloud_provider --gitops-helm-path=$gitops_helm_path
+
+    #2. Patch Argo files
+    #argo-workflows bootstrap
 }
