@@ -55,6 +55,10 @@ output "alb-arn" {
 }
 
 # secrets-manager
+output "secrets-pod-identity-arn" {
+  value = module.secrets-manager.secrets-pod-identity-arn
+}
+
 output "secrets-arn" {
   value = module.secrets-manager.secrets-arn
 }

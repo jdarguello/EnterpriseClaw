@@ -17,5 +17,5 @@ def "main kube-tools preconditioning" [
     istio bootstrap --cloud-provider=$cloud_provider --gitops-helm-path=$gitops_helm_path
 
     #2. Patch Argo files
-    #argo-workflows bootstrap
+    argo-workflows bootstrap
 }

@@ -1,5 +1,3 @@
-source ../utils/generals.nu
-
 #Return IaC Outputs!
 def --env "infra output" [
     --output-name: string               #Name of the 'output' to retrieve

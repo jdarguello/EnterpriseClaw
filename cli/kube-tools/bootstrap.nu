@@ -19,7 +19,7 @@ def "main kube-tools bootstrap" [
     main kube-tools preconditioning --gitops-helm-path=$gitops_helm_path --git-provider=$git_provider --cloud-provider=$cloud_provider --gitops-setup=$gitops_setup
 
     #3. Service Mesh preconditioning
-    main service-mesh preconditioning
+    main service-mesh preconditioning --cloud-provider=$cloud_provider
 
     #4. Push to registry
     if ($gitops_setup == "push") {
