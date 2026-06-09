@@ -5,11 +5,7 @@ source ../../external-secrets/sa.nu
 source helm.nu
 
 def "argo-workflows bootstrap" [
-    --irsa-output-name = "innersource-secrets-arn"
     --cloud-provider:       string
-    --github-secret-name: string
-    --gitops-path-base: string
-    --gitops-helm-path: string
 ] {
     #1. Public subnets info
     let infra_outputs = {

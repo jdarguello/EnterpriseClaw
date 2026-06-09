@@ -29,7 +29,7 @@ module "secrets_policy" {
 module "irsa_secrets_manager" {
   source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
 
-  name = "${var.project}-secrets-manager"
+  name = "${var.project}-secrets"
 
   oidc_providers = {
     workflow_oidc = {

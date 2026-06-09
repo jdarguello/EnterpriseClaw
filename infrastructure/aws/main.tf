@@ -46,6 +46,7 @@ module "secrets-manager" {
   cluster_name        = var.cluster_name
   oidc_provider_arn   = module.cluster.oidc_provider_arn
   secrets_registries  = var.secrets_registries
+  project             = var.project
 }
 
 module "image-registries" {
