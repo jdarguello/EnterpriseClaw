@@ -13,7 +13,7 @@ def "argo-workflows bootstrap" [
     }
 
     #2. Adjust Helm-vars
-    argo workflows helm --infra-outputs=$opentofu_outputs --cloud-provider=$cloud_provider
+    argo-workflows helm --infra-outputs=$infra_outputs --cloud-provider=$cloud_provider
 
     #3. Patch ServiceAccount pipe-storage
     argo-workflows bootstrap patch pipe-storage --cloud-provider=$cloud_provider
@@ -26,7 +26,7 @@ def "argo-workflows bootstrap patch pipe-storage" [
     --cloud-provider: string
 ] {
     #1. Obtain pipe-storage irsa arn
-    let irsa_arn = (opentofu output --cloud-provider=$cloud_provider --output-name="irsa-pipeline-storage-arn")
+    let irsa_arn = (infra output --cloud-provider=$cloud_provider --output-name="irsa-pipeline-storage-arn")
 
     #2. Set saving path
     let save_path = abs-path --path="gitops-config/config/argo-workflows/sa-pipe-patch.yaml" --replace-argument=""
@@ -39,11 +39,11 @@ def "argo-workflows bootstrap patch secrets-manager" [
     --cloud-provider: string
 ] {
     #1. Obtain pipe-storage irsa arn
-    let irsa_arn = (opentofu output --cloud-provider=$cloud_provider --output-name="secrets-arn")
+    let irsa_arn = (infra output --cloud-provider=$cloud_provider --output-name="secrets-arn")
 
     #2. Set saving path
-    let save_path = abs-path --path="gitops-config/config/argo-workflows/sa-pipe-patch.yaml" --replace-argument=""
+    let save_path = abs-path --path="gitops-config/config/argo-workflows/sa-secrets.yaml" --replace-argument=""
 
     #3. Patch ServiceAccount manifest
-    external-secrets sa irsa --namespace="argo" --role-arn=$irsa_arn --role-name="pipe-storage" --save-path=$save_path
+    external-secrets sa irsa --namespace="argo" --role-arn=$irsa_arn --role-name="secrets-manager" --save-path=$save_path
 }

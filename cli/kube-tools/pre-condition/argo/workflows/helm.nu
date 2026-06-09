@@ -1,6 +1,6 @@
 source ../../../../utils/generals.nu
 
-def --env "argo workflows helm vars" [
+def --env "argo-workflows helm" [
     --namespace =       "argo"
     --cloud-provider:   string
     --infra-outputs:    record
@@ -15,7 +15,7 @@ def --env "argo workflows helm vars" [
         value: $env.region
     }
 
-    let node_labels = k8s node-labels subnet-environments
+    let node_labels = k8s node-labels subnet-environments --cloud-provider=$cloud_provider
 
     #2. Definición de variables y almacenamiento
     {
