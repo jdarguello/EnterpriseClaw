@@ -7,5 +7,5 @@ output "pipeline-storage-domain-name" {
 }
 
 output "pipeline-storage-name" {
-  value = module.pipeline-storage.s3_directory_bucket_name
+  value = module.pipeline-storage.s3_bucket_id
 }
