@@ -18,4 +18,5 @@ def "main kube-tools preconditioning" [
 
     #2. Patch Argo files
     argo-workflows bootstrap --cloud-provider=$cloud_provider
+    #argo-events bootstrap --cloud-provider=$cloud_provider
 }

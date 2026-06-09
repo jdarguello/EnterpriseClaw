@@ -80,3 +80,7 @@ output "irsa-pipeline-storage-arn" {
 output "pipeline-storage-domain-name" {
   value = module.pipe-storage.pipeline-storage-domain-name
 }
+
+output "pipeline-storage-name" {
+  value = module.pipe-storage.pipeline-storage-name
+}

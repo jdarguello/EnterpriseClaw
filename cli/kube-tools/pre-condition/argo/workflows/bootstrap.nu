@@ -3,9 +3,10 @@ source ../../../../utils/generals.nu
 source ../../external-secrets/sa.nu
 
 source helm.nu
+source cm.nu
 
 def "argo-workflows bootstrap" [
-    --cloud-provider:       string
+    --cloud-provider: string
 ] {
     #1. Public subnets info
     let infra_outputs = {
@@ -20,6 +21,9 @@ def "argo-workflows bootstrap" [
 
     #4. Patch SA Secrets Manager
     argo-workflows bootstrap patch secrets-manager --cloud-provider=$cloud_provider
+
+    #5. Patch ConfigMap for blob storage
+    argo-workflows bootstrap patch cm --cloud-provider=$cloud_provider
 }
 
 def "argo-workflows bootstrap patch pipe-storage" [
