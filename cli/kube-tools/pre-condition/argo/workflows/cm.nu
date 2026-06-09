@@ -47,7 +47,7 @@ def --env "argo-workflows bootstrap patch cm aws" [] {
             archiveLogs: true
         }
         s3: {
-            bucket: $bucket_name
+            bucket: ($bucket_name | str trim -c '"')
             keyPrefix: "argo-artifacts"
             endpoint: "s3.amazonaws.com"
             region: $env.region
