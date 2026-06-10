@@ -1,0 +1,44 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: istio-system
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - chart: base
+      repoURL: https://istio-release.storage.googleapis.com/charts
+      targetRevision: 1.28.0
+      helm:
+        releaseName: istio-base
+    - chart: istiod
+      repoURL: https://istio-release.storage.googleapis.com/charts
+      targetRevision: 1.28.0
+      helm:
+        releaseName: istiod
+        valueFiles:
+          - $values/gitops/helm/kube-tools/istio-system/values-istiod.yaml
+    - chart: cni
+      repoURL: https://istio-release.storage.googleapis.com/charts
+      targetRevision: 1.28.0
+      helm:
+        releaseName: istio-cni
+        valueFiles:
+          - $values/gitops/helm/kube-tools/istio-system/values-cni.yaml
+    - chart: ztunnel
+      repoURL: https://istio-release.storage.googleapis.com/charts
+      targetRevision: 1.28.0
+      helm:
+        releaseName: ztunnel
+    - repoURL: https://github.com/jdarguello/EnterpriseClaw
+      targetRevision: main
+      ref: values
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: istio-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

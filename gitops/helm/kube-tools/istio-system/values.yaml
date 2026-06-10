@@ -1,8 +1,0 @@
-istiod:
-  profile: "ambient"
-  trustedZtunnelNamespace: "istio-system"
-
-cni:
-  profile: "ambient"
-  ambient:
-    enabled: true

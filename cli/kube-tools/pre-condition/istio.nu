@@ -16,13 +16,13 @@ def "istio bootstrap istiod" [
     --cloud-provider:   string
 ] {
     #1. Path de instalación
-    let path = $"($gitops_helm_path)/kube-tools/istio-system/values.yaml"
+    let path = $"($gitops_helm_path)/kube-tools/istio-system/values-istiod.yaml"
     let abs_path = abs-path --path=$path --replace-argument=""
 
     #2. Definición de Helm-vars
     let node_labels = k8s node-labels subnet-environments --cloud-provider=$cloud_provider
 
-    let istiod_vars = {
+    {
         nodeSelector: {
             "eks.amazonaws.com/nodegroup": ($node_labels | get backend)
         }
@@ -33,12 +33,7 @@ def "istio bootstrap istiod" [
                 }
             }
         }
-    }
-
-    #3. Update del Helm-vars
-    mut istio_vars = open $abs_path
-    $istio_vars = $istio_vars | update istiod $istiod_vars
-    $istio_vars | to yaml | save $abs_path --force
+    } | to yaml | save $abs_path --force
 }
 
 def "istio bootstrap gateway" [
@@ -52,14 +47,9 @@ def "istio bootstrap gateway" [
     #2. Definición de Helm-vars
     let node_labels = k8s node-labels subnet-environments --cloud-provider=$cloud_provider
 
-    let gateway_vars = {
+    {
         nodeSelector: {
             "eks.amazonaws.com/nodegroup": ($node_labels | get backend)
         }
-    }
-
-    #3. Update del Helm-vars
-    mut istio_vars = open $abs_path
-    $istio_vars = $istio_vars | update gateway $gateway_vars
-    $istio_vars | to yaml | save $abs_path --force
+    } | to yaml | save $abs_path --force
 }
