@@ -28,16 +28,14 @@ def "alb-controller patch helm-vars" [
 
     #2. Generate Helm vars
     {
-        "aws-load-balancer-controller": {
-            clusterName: $infra_outputs.clusterName
-            region: $infra_outputs.region
-            vpcId: $infra_outputs.vpcId
-            serviceAccount: {
-                create: true
-                name: $infra_outputs.serviceAccountName
-                annotations: {
-                    "eks.amazonaws.com/role-arn": $infra_outputs.saAnnotation
-                }
+        clusterName: $infra_outputs.clusterName
+        region: $infra_outputs.region
+        vpcId: $infra_outputs.vpcId
+        serviceAccount: {
+            create: true
+            name: $infra_outputs.serviceAccountName
+            annotations: {
+                "eks.amazonaws.com/role-arn": $infra_outputs.saAnnotation
             }
         }
     } | to yaml | save $abs_path --force

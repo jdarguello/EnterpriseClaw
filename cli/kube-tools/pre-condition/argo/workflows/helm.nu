@@ -39,6 +39,17 @@ def --env "argo-workflows helm" [
             nodeSelector: {
                 "eks.amazonaws.com/nodegroup": ($node_labels | get frontend)
             }
+            podLabels: {
+                "role": "frontend"
+            }
+            tolerations: [
+                {
+                    key: "role"
+                    operator: "Equal"
+                    value: "frontend"
+                    effect: "NoSchedule"
+                }
+            ]
         } 
     } | to yaml | save $abs_path --force
 }
