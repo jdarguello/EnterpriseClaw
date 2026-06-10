@@ -41,10 +41,20 @@ spec:
       kind: ValidatingWebhookConfiguration
       jqPathExpressions:
         - .webhooks[].clientConfig.caBundle
+        - .webhooks[].clientConfig.service.port
+        - .webhooks[].failurePolicy
+        - .webhooks[].matchPolicy
+        - .webhooks[].namespaceSelector
+        - .webhooks[].rules[].scope
     - group: admissionregistration.k8s.io
       kind: MutatingWebhookConfiguration
       jqPathExpressions:
         - .webhooks[].clientConfig.caBundle
+        - .webhooks[].clientConfig.service.port
+        - .webhooks[].failurePolicy
+        - .webhooks[].matchPolicy
+        - .webhooks[].namespaceSelector
+        - .webhooks[].rules[].scope
   syncPolicy:
     automated:
       prune: true
