@@ -26,18 +26,16 @@ def "external-dns patch helm-vars" [
 
     #2. Generar Helm vars
     {
-        "external-dns": {
-            policy: "sync"
-            txtOwnerId: $infra_outputs.clusterName
-            provider: {
-                name: "aws"
-            }
-            serviceAccount: {
-                create: true
-                name: $infra_outputs.serviceAccountName
-                annotations: {
-                    "eks.amazonaws.com/role-arn": $infra_outputs.saAnnotation
-                }
+        policy: "sync"
+        txtOwnerId: $infra_outputs.clusterName
+        provider: {
+            name: "aws"
+        }
+        serviceAccount: {
+            create: true
+            name: $infra_outputs.serviceAccountName
+            annotations: {
+                "eks.amazonaws.com/role-arn": $infra_outputs.saAnnotation
             }
         }
     } | to yaml | save $abs_path --force
