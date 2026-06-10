@@ -1,4 +1,5 @@
 source argo/workflows/bootstrap.nu
+source argo/events/bootstrap.nu
 
 source alb-controller.nu
 source external-dns.nu

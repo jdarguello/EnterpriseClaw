@@ -5,7 +5,10 @@ def "external-secrets bootstrap" [] {
     #1. Install ESO
     external-secrets bootstrap gitops
 
-    #2. ESO Configuration
+    #2. Wait for reconciliation
+    sleep 45sec
+
+    #3. ESO Configuration
     external-secrets bootstrap config
 }
 
