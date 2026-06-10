@@ -42,15 +42,32 @@ def --env "main init" [
 }
 
 #Destroy all the created and configured infrastructure of the project! (Ideal for ephemeral environments)
-def "main destroy" [
-    --cloud-provider        = "aws"     #Options: 'aws', 'azure' or 'gcp'
-    --local-testing         = false     #If you're doing local testing, you might want to delete the 'bootstrap' tofu configuration
+def --env "main destroy" [
+    --cluster-name          = "enterpriseclaw"      #K8s cluster's name
+    --cloud-provider        = "aws"                 #Options: 'aws', 'azure' or 'gcp'
+    --local-testing         = false                 #If you're doing local testing, you might want to delete the 'bootstrap' tofu configuration
+    --gitops-agent          = "argocd"              #Options: 'argocd'
 ] {
-    #1. Destroy all infrastructure
+    #1. Cluster connection
+    main cluster connect --cloud-provider=$cloud_provider --region=$env.region --cluster-name=$"($cluster_name)-cluster"
+
+    #2. Delete ALB and DNS (REVIEW)
+    if ($gitops_agent == "argocd") {
+        kubectl delete application -n argocd main
+    }
+
+    #3. Delete Image Registry (REVIEW)
+    #containers destroy all --path=$image_path_base
+    
+    sleep 120sec         #Espera un tiempo para la reconciliación
+
+    #4. Destroy all infrastructure
     main cluster teardown --cloud-provider=$cloud_provider
 
-    #2. Delete persistant storage (for local testing)
+    #5. Delete persistant storage (for local testing)
     if ($local_testing) {
         main cluster bootstrap destroy --cloud-provider=$cloud_provider
     }
 }
+
+
