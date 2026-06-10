@@ -8,26 +8,26 @@ spec:
   sources:
     - chart: base
       repoURL: https://istio-release.storage.googleapis.com/charts
-      targetRevision: 1.28.0
+      targetRevision: 1.30.1
       helm:
         releaseName: istio-base
     - chart: istiod
       repoURL: https://istio-release.storage.googleapis.com/charts
-      targetRevision: 1.28.0
+      targetRevision: 1.30.1
       helm:
         releaseName: istiod
         valueFiles:
           - $values/gitops/helm/kube-tools/istio-system/values-istiod.yaml
     - chart: cni
       repoURL: https://istio-release.storage.googleapis.com/charts
-      targetRevision: 1.28.0
+      targetRevision: 1.30.1
       helm:
         releaseName: istio-cni
         valueFiles:
           - $values/gitops/helm/kube-tools/istio-system/values-cni.yaml
     - chart: ztunnel
       repoURL: https://istio-release.storage.googleapis.com/charts
-      targetRevision: 1.28.0
+      targetRevision: 1.30.1
       helm:
         releaseName: ztunnel
     - repoURL: https://github.com/jdarguello/EnterpriseClaw
