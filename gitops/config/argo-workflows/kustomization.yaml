@@ -5,5 +5,4 @@ resources:
 - rolebinding.yaml
 - sa-pipe.yaml
 - sa-inner.yaml
-- external-secret.yaml
 - secret-store.yaml
