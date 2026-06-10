@@ -1,11 +1,11 @@
 def "argo-events helm" [
-    --namespace: string
-    --node-labels: record
+    --namespace:        string
+    --cloud-provider:   string
 ] {
     #1. node-labels and gitops-path
     let node_labels = k8s node-labels subnet-environments --cloud-provider=$cloud_provider
 
-    let save_path = abs-path path="gitops-config/helm/argo/events/values.yaml" --replace-argument=""
+    let save_path = abs-path --path="gitops-config/helm/argo/events/values.yaml" --replace-argument=""
 
     #2. Patch helm manifest
     {

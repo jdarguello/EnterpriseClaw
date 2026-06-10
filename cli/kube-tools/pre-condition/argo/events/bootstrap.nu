@@ -8,7 +8,7 @@ def "argo-events bootstrap" [
     --cloud-provider: string
 ] {
     #1. Adjust Helm-vars
-    argo-events helm --namespace="argo-events" --node-labels=$node_labels
+    argo-events helm --namespace="argo-events" --cloud-provider=$cloud_provider
 
     #2. Patch ServiceAccount webhook
     argo-events bootstrap patch webhook --cloud-provider=$cloud_provider
