@@ -27,7 +27,7 @@ def "argo-events bootstrap patch webhook" [
     let save_path = abs-path --path="gitops-config/config/argo-events/sa-webhook.yaml" --replace-argument=""
 
     #3. Patch ServiceAccount manifest
-    external-secrets sa irsa --namespace="argo" --role-arn=$irsa_arn --role-name="pipe-storage" --save-path=$save_path
+    external-secrets sa irsa --namespace="argo" --role-arn=$irsa_arn --role-name="webhook" --save-path=$save_path
 }
 
 def "argo-events bootstrap patch secrets-manager" [

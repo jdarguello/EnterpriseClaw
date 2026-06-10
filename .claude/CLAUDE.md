@@ -19,5 +19,9 @@ Runs OpenTofu to create the VPC, K8s cluster, DNS zones, image registries, Blob 
 
 ## 1.3. GitOps Toolkit
 
-Authenticates to the git-provider, clones user's GitOps config repo, and patches the Kubernetes manifests with the live infra outputs (ALB controller role ARN, certificate ARN, hosted zone IDs) so ArgoCD can apply them cleanly on first boot.
+Authenticates to the git-provider, clones user's GitOps config repo, and patches the Kubernetes manifests with the live infra outputs (ALB controller role ARN, certificate ARN, hosted zone IDs) so Argo CD can apply them cleanly on first boot.
 
+The GitOps is made by two repositories:
+
+1. __Public source:__ contains the general objects that are expected to live in the user's agent orchestrator. It acts as the general framework for every private project that intends to use it. The url is: https://github.com/jdarguello/EnterpriseClaw
+2. __Private repo:__ user's own repository for private configuration with their infrastructure data. 
