@@ -5,6 +5,7 @@ source infra/cluster.nu
 source cluster/connect.nu
 source kube-tools/bootstrap.nu
 source gitops/bootstrap.nu
+source gitops/teardown.nu
 
 def "main" [] {
     enterpriseclaw -h
@@ -51,10 +52,8 @@ def --env "main destroy" [
     #1. Cluster connection
     main cluster connect --cloud-provider=$cloud_provider --region=$env.region --cluster-name=$"($cluster_name)-cluster"
 
-    #2. Delete ALB and DNS (REVIEW)
-    if ($gitops_agent == "argocd") {
-        kubectl delete application -n argocd main
-    }
+    #2. Delete ALB and DNS
+    main teardown gitops --gitops-agent=$gitops_agent
 
     #3. Delete Image Registry (REVIEW)
     #containers destroy all --path=$image_path_base
