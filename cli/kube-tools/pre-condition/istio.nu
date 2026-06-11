@@ -1,11 +1,9 @@
 source ../../utils/generals.nu
 
 def "istio bootstrap" [
-    --cloud-provider:   string
+    --cloud-provider:       string
+    --gitops-helm-path =    "gitops-config/helm-istio"
 ] {
-    #0. Helm-path
-    let gitops_helm_path = abs-path --path="gitops-config/helm-istio" --replace-argument=""
-
     #1. Helm-vars of istiod
     istio bootstrap istiod --gitops-helm-path=$gitops_helm_path --cloud-provider=$cloud_provider
     
