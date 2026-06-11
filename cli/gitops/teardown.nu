@@ -13,4 +13,6 @@ def "argo-project teardown" [] {
 
     #2. Delete 'configs' ApplicationSet with ALB and DNS configurations
     kubectl delete applicationset -n argocd configs
+
+    kubectl delete applicationset -n argocd helm-istio
 }
