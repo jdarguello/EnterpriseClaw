@@ -61,9 +61,17 @@ def --env "main destroy" [
     sleep 120sec         #Espera un tiempo para la reconciliación
 
     #4. Destroy all infrastructure
+    main destroy infra
+}
+
+def "main destroy infra" [
+    --cloud-provider        = "aws"                 #Options: 'aws', 'azure' or 'gcp'
+    --local-testing         = false                 #If you're doing local testing, you might want to delete the 'bootstrap' tofu configuration
+] {
+    #1. Teardown infrastructure
     main cluster teardown --cloud-provider=$cloud_provider
 
-    #5. Delete persistant storage (for local testing)
+    #2. Delete persistant storage (for local testing)
     if ($local_testing) {
         main cluster bootstrap destroy --cloud-provider=$cloud_provider
     }
