@@ -1,9 +1,11 @@
 source ../../utils/generals.nu
 
 def "istio bootstrap" [
-    --gitops-helm-path:     string
     --cloud-provider:   string
 ] {
+    #0. Helm-path
+    let gitops_helm_path = abs-path path="gitops-config/helm-istio" --replace-argument=""
+
     #1. Helm-vars of istiod
     istio bootstrap istiod --gitops-helm-path=$gitops_helm_path --cloud-provider=$cloud_provider
     
@@ -16,7 +18,7 @@ def "istio bootstrap istiod" [
     --cloud-provider:   string
 ] {
     #1. Path de instalación
-    let path = $"($gitops_helm_path)/kube-tools/istio-system/values-istiod.yaml"
+    let path = $"($gitops_helm_path)/istio-system/values-istiod.yaml"
     let abs_path = abs-path --path=$path --replace-argument=""
 
     #2. Definición de Helm-vars
@@ -41,7 +43,7 @@ def "istio bootstrap gateway" [
     --cloud-provider:   string
 ] {
     #1. Path de instalación
-    let path = $"($gitops_helm_path)/kube-tools/istio-ingress/values.yaml"
+    let path = $"($gitops_helm_path)/istio-ingress/values.yaml"
     let abs_path = abs-path --path=$path --replace-argument=""
 
     #2. Definición de Helm-vars

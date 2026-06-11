@@ -15,7 +15,7 @@ def "main kube-tools preconditioning" [
     #1. Patch manifest files
     alb-controller bootstrap --cloud-provider=$cloud_provider --gitops-helm-path=$gitops_helm_path
     external-dns bootstrap --cloud-provider=$cloud_provider --gitops-helm-path=$gitops_helm_path
-    istio bootstrap --cloud-provider=$cloud_provider --gitops-helm-path=$gitops_helm_path
+    istio bootstrap --cloud-provider=$cloud_provider
 
     #2. Patch Argo files
     argo-workflows bootstrap --cloud-provider=$cloud_provider
