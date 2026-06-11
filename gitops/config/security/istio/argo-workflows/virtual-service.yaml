@@ -14,6 +14,6 @@ spec:
             prefix: /
       route:
         - destination:
-            host: argo-argo-workflows-server.argo.svc.cluster.local
+            host: argo-workflows-server.argo.svc.cluster.local
             port:
               number: 2746
