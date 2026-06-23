@@ -5,6 +5,7 @@
         "opentofu@1.11.6",
         "podman@5.8.2",
         "kubectl@1.36.0",
+        "operator-sdk@1.42.2",
         "kubernetes-helm@3.20.2",
         "argo@3.6.3",
         "argo-workflows@3.6.10",
