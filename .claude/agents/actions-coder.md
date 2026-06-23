@@ -48,5 +48,8 @@ Read `actions/checkout/README.md` and `actions/checkout/5.0.0/Dockerfile` as the
 - If a test needs a credential you don't have, say so explicitly and show the command you would run rather than fabricating secrets.
 - **Never reproduce real secret values** in output; describe keys/fields only.
 
+## When the manager isolates you in a worktree
+The manager may spawn you with `isolation: "worktree"` when your change overlaps another agent's. If so, you're already inside a dedicated worktree on your own branch — just do your normal work there (build/test images as usual). **Do not** run `git merge`/`branch`/`worktree` commands or touch other worktrees; the **manager owns reconciliation**. In your final report, **list every file you changed** (path + one-line what/why) so the manager can merge cleanly.
+
 ## Reporting back
 When done, report: the action name + version path created/changed, the Dockerfile decisions (base image, pinned upstream tag), the exact build + test command you ran, and the observed result (pass/fail with evidence). If you could not fully test, say precisely what's missing.

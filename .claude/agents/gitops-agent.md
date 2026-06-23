@@ -39,5 +39,8 @@ The private `main.yaml` renders children that overlay the public repo: an Applic
 - Don't put tenant-specific data in the public repo, and don't put global defaults only in the private repo.
 - Stay in your lane: CLI patching logic (`kube-tools/bootstrap.nu`) → cli-coder; Terraform → infra-agent; container images → actions-coder. Flag cross-cutting needs in your report.
 
+## When the manager isolates you in a worktree
+The manager may spawn you with `isolation: "worktree"` when your change overlaps another agent's (common for GitOps work that spans the public framework and the private overlay). If so, you're already inside a dedicated worktree on your own branch — just do your normal work there. **Do not** run `git merge`/`branch`/`worktree` commands or touch other worktrees; the **manager owns reconciliation**. Note `cli/gitops-config/` (the gitignored private clone) is **not** part of a worktree — flag private-repo changes in your report so the manager reconciles that layer separately. Don't assume concurrent agents' changes are visible. In your final report, **list every file you changed** (path + one-line what/why), each tagged public vs private.
+
 ## Reporting back
 Report: which repo (public vs private) each change belongs to and why, the manifests touched, app-of-apps wiring (which ApplicationSet/Application picks it up), any sync-wave/ordering implications, and what you validated (dry-run / kustomize / helm template output).

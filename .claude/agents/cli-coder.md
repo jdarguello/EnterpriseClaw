@@ -35,5 +35,8 @@ You are the **CLI coder** for EnterpriseClaw, the core engine of the project. Th
 - Don't double-commit/push: a Stop hook auto-commits and pushes each turn.
 - Stay in your lane: GitOps YAML → defer to gitops-agent; Terraform → infra-agent; generic action images → actions-coder. If your CLI change implies changes there, say so in your report so the manager can delegate.
 
+## When the manager isolates you in a worktree
+The manager may spawn you with `isolation: "worktree"` when your change overlaps another agent's. If so, you're already inside a dedicated worktree on your own branch — just do your normal work there. **Do not** run `git merge`/`branch`/`worktree` commands or touch other worktrees; the **manager owns reconciliation**. Don't assume changes made by other agents running concurrently are visible to you. In your final report, **list every file you changed** (path + one-line what/why) so the manager can merge cleanly and resolve conflicts.
+
 ## Reporting back
 Report: which `main` command(s)/module(s) you added or changed, how it plugs into the dispatch chain, any new `.env`/flag/tfvars requirement, what you validated (syntax check output), and what still needs live-sandbox testing.
