@@ -30,7 +30,7 @@ Two goals drive the work:
 1. **Near-term:** prepare a **talk + demo for ArgoCon Japan**. Favor a reliable, demoable slice that resonates with an Argo / GitOps / cloud-native audience.
 2. **Longer-term:** scale EnterpriseClaw into an **open-source framework for AI Agent Orchestration** in regulated enterprises.
 
-## 2.1. AI Assistant runtime vision (NOT yet built — open design question)
+## 2.1. AI Assistant runtime vision (runtime not yet built; ArgoCon demo architecture now decided — see §2.2)
 
 The actual assistant workload is **not in the codebase yet**; today the repo stands up the *platform and CI plumbing*, not the agent. The working (not finalized) vision is a **hybrid topology segmented by user persona / trust zone / blast radius**:
 
@@ -40,7 +40,26 @@ The actual assistant workload is **not in the codebase yet**; today the repo sta
 | Platform | Platform/SRE | **Kagent** (on-cluster) | k8s orchestration: Platform Engineering Golden Paths + AIOps |
 | Functional | Business user (e.g. bank commercial team) | **Dapr Agents** | Durable, data-bound domain workflows |
 
-**Short-term focus:** the simplest path — **Kagent + general agents via OpenCode**. The recommended ArgoCon demo is the **Platform tier**: Kagent receives a chat order, reasons, and emits a GitOps change (PR / Argo Workflow) that Argo CD/Workflows reconciles — reusing the existing GitHub-push → Argo Events → Argo Workflows chain as the substrate. NemoClaw (local) and Dapr (functional) are roadmap, not demo scope.
+**Short-term focus:** the **Platform tier** — Kagent driving the existing Argo substrate. This was an open design question; it is now **decided** for the demo (see §2.2). NemoClaw (local), Dapr (functional), and OpenCode general agents are roadmap, **not** demo scope.
+
+## 2.2. ArgoCon demo — decided architecture (target ~July 2026)
+
+The §2.1 open question is **resolved for the demo**. Scenario: a **Golden Path via chat** — a platform engineer asks in **Slack** for a new service + a managed dependency; the agent reasons and **opens a PR** carrying a **Crossplane** Claim; Argo reconciles it into existence. Every piece has documented building blocks (verified against Kagent docs, 2026-06-23).
+
+**Decided spine:**
+> Slack → Istio gateway → **Argo Events Slack EventSource** → Sensor → **Argo Workflow** (one short-lived run *per inbound message*) → step calls **Kagent** over **A2A** (HTTP `:8083`, via an A2A-client container in the `actions/` pattern) → agent reasons on **Claude via AWS Bedrock** (auth: **EKS IRSA** on its ServiceAccount) → agent **opens a PR to the private gitops repo via the GitHub MCP server** (mutating ops behind a human-approval prompt) → reply posted back to Slack → human merges → **Argo CD** syncs → **Crossplane** reconciles the Claim → app Deployment (instant) + managed dependency (pre-warmed).
+
+**Key decisions:**
+- **Stateless, per-message conversation.** Compute is stateless; conversation state lives in **Slack thread history** (rebuilt each turn via `conversations.replies`), *not* in a long-running/suspended workflow nor Kagent's server-side `contextId`. Multi-turn clarification = the agent posts a question; the next Slack reply fires a fresh workflow. The agent returns **structured output** (`question` vs `proposal`) so the Workflow DAG can branch deterministically.
+- **Change delivery = the agent opens the PR itself** (decided: option A), via GitHub MCP (`create_branch` / `create_or_update_file` / `create_pull_request`). This is `gitops-setup=pull`/PR mode — a flag today with **no implementing code** (§4), so it is net-new.
+- **Model = Claude on Bedrock via IRSA.** Account prereqs: enable **Bedrock model access** for the Claude model; grant `bedrock:InvokeModel`. (`ModelConfig` `provider: Bedrock` + `bedrock.region`.)
+- **Audit story:** every order = an archived Argo Workflow (enable the **Workflow Archive** + write prompt/response/manifest as **artifacts to the provisioned S3 bucket**), plus the PR + git history. Framing: *AI proposes; a governed, auditable pipeline disposes.*
+
+**Build phases** (do P0 first — riskiest unknown): **P0** Kagent install + `ModelConfig` (Bedrock) + IRSA role + A2A reachability · **P1** wire the GitHub MCP server + test the PR-open path end-to-end · **P2** Crossplane + AWS provider + a minimal **XRD/Composition** Golden Path, landing where an ApplicationSet globs it · **P3** stitch Slack↔Workflow↔agent + archive/artifacts + pre-warm the slow managed dependency.
+
+**Dry-run before stage** (the real reliability risks): the GitHub-MCP PR path (kagent issue **#976**); the exact A2A multi-turn history payload (under-documented); the Bedrock model-access toggle; **pin every Kagent chart version** (CNCF Sandbox, pre-1.0 ~v0.9.x — API churn, e.g. ToolServer→kmcp).
+
+**Still TBD (secondary):** managed dependency = Redis (ElastiCache) vs Postgres (RDS); exact XRD/Composition shape (lean: real but minimal); human merges the PR live on stage (lean: yes).
 
 ---
 
@@ -100,7 +119,7 @@ All driven by `main init` / `main destroy` in [cli/enterpriseclaw](../cli/enterp
 - **AWS is the real target.** Don't design for azure/gcp in the near term (aspirational only).
 - **Sandbox values are intentional.** The hardcoded tenant identifiers in the public repo (e.g. `grupobancolombia-innersource`, `events.devexp-bancol.com` in [gitops/config/argo-events/event-source.yaml](../gitops/config/argo-events/event-source.yaml)) and the credential-shaped values in `cli/.env` are throwaway sandbox data — **do not keep re-flagging them as a live security leak.** (Parameterizing tenant values out of the *public* framework is still worth doing once, before the eventual OSS release.)
 - **Never reproduce secret values** (`.env`, `*.pem`, tfvars secrets) in output — describe keys/fields only.
-- Lead the ArgoCon demo with **Kagent driving the existing GitOps/Argo pipeline**; keep NemoClaw/Dapr as roadmap.
+- Lead the ArgoCon demo with **Kagent driving the existing GitOps/Argo pipeline** per the decided architecture in **§2.2**; keep NemoClaw/Dapr/OpenCode as roadmap.
 
 ---
 
