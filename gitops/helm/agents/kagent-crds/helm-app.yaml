@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kagent-crds
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"   # CRDs first — the controller and all CRs depend on them
+spec:
+  project: default
+  source:
+    chart: kagent-crds
+    repoURL: ghcr.io/kagent-dev/kagent/helm   # OCI Helm chart (Helm-format source: no oci:// prefix)
+    targetRevision: 0.9.9
+    helm:
+      releaseName: kagent-crds
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: kagent
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true   # kagent CRDs are large; avoid the last-applied-config annotation size limit

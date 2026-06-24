@@ -1,0 +1,45 @@
+# Trimmed kagent values for a small / dry-run cluster.
+# Keys verified against helm/kagent/values.yaml @ v0.9.9 (2026-06-24).
+# Rationale + footprint notes: .claude/skills/kagent-trio/reference/install.md
+#
+# Helm silently ignores unknown values keys, so a mistyped disable-key leaves that
+# component ON. Re-verify these names against the pinned chart before trusting them.
+
+database:
+  postgres:
+    bundled:
+      enabled: false          # biggest single saving — drops long-term memory / request-log persistence
+
+ui:
+  replicas: 0                 # no dashboard Deployment (no documented ui.enabled; replicas:0 works)
+
+kmcp:
+  enabled: true               # part of the trio: the on-cluster MCPServer controller.
+                              # First toggle to flip to `false` if the controller pod can't be scheduled.
+
+kagent-tools:
+  enabled: false              # built-in tool server; off unless an agent uses it
+grafana-mcp: { enabled: false }
+querydoc:    { enabled: false }   # also wants an OpenAI key
+
+controller:
+  replicas: 1
+  watchNamespaces: ["kagent"] # scope the watch (less work + smaller blast radius); CRs must live here
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits:   { cpu: 1,   memory: 512Mi }
+
+rbac:
+  namespaces: ["kagent"]      # namespaced Role/RoleBinding instead of a cluster-scoped ClusterRole
+
+# All 10 bundled sample agents OFF (each ~128Mi → ~1.3Gi if left on). Exact keys, verbatim:
+k8s-agent:            { enabled: false }
+kgateway-agent:       { enabled: false }
+istio-agent:          { enabled: false }
+promql-agent:         { enabled: false }
+observability-agent:  { enabled: false }
+argo-rollouts-agent:  { enabled: false }
+helm-agent:           { enabled: false }
+cilium-policy-agent:  { enabled: false }
+cilium-manager-agent: { enabled: false }
+cilium-debug-agent:   { enabled: false }

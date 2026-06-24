@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kagent
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"   # after kagent-crds (wave 0)
+spec:
+  project: default
+  sources:
+    - chart: kagent
+      repoURL: ghcr.io/kagent-dev/kagent/helm   # OCI Helm chart; bundles the kmcp controller (>=0.7)
+      targetRevision: 0.9.9
+      helm:
+        releaseName: kagent
+        valueFiles:
+          - $values/gitops/helm/agents/kagent/values.yaml
+    - repoURL: https://github.com/jdarguello/EnterpriseClaw
+      targetRevision: main
+      ref: values
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: kagent
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,4 @@
+resources:
+- kagent-crds/
+- kagent/
+# - agentgateway/   # added once the chart-vs-standalone shape is decided (see SKILL: jwt-propagation dry-run)
