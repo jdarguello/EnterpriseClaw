@@ -1,2 +1,12 @@
 profile: "ambient"
 trustedZtunnelNamespace: "istio-system"
+
+# istiod (pilot) resources. The chart default REQUESTS 2Gi memory, which is unschedulable on small
+# nodes (it left istiod Pending — "Insufficient memory" — on the dry-run VM). 384Mi is a sane
+# scheduling floor for a small/medium mesh; no memory limit is set so istiod can still burst under
+# load (avoids an OOM cap). Raise the request for large prod meshes (istiod grows with proxy count).
+pilot:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
