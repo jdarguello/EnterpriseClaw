@@ -9,7 +9,7 @@ description: >-
   tofu, helm, gh) and reports structured pass/fail feedback. It does not edit code
   or fix issues — it diagnoses and hands findings back to the manager.
 model: claude-sonnet-4-6
-effort: medium
+effort: high
 tools: Read, Bash, Glob, Grep
 color: cyan
 ---
