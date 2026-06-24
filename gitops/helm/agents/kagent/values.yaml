@@ -8,7 +8,13 @@
 database:
   postgres:
     bundled:
-      enabled: false          # biggest single saving — drops long-term memory / request-log persistence
+      enabled: true           # REQUIRED: the kagent controller has NO DB-less mode — `helm template`
+                              # FAILS without a database (controller-deployment.yaml:94). To drop this
+                              # pod you must instead supply an external database.postgres.url / urlFile;
+                              # there is no SQLite/file option. Binds a PVC on local-path (default SC).
+      resources:
+        requests: { cpu: 100m, memory: 256Mi }
+        limits:   { cpu: 500m, memory: 512Mi }
 
 ui:
   replicas: 0                 # no dashboard Deployment (no documented ui.enabled; replicas:0 works)

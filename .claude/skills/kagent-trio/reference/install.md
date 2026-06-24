@@ -44,7 +44,8 @@ The chart is heavy by default: a **bundled Postgres** (250m/256Mi), the **UI** (
 database:
   postgres:
     bundled:
-      enabled: false          # biggest single saving (no long-term memory / req-log persistence)
+      enabled: true           # REQUIRED — do NOT disable without an external DB (see gotcha below).
+                              # ~256Mi pod + a PVC (needs a default StorageClass). Trim its resources if needed.
 ui:
   replicas: 0                 # drop the dashboard Deployment (no documented `ui.enabled`; replicas:0 works)
 kmcp:
@@ -75,6 +76,7 @@ cilium-debug-agent:   { enabled: false }
 ```
 
 Notes:
+- **A database is MANDATORY (gotcha, verified the hard way 2026-06-24 on v0.9.9).** `controller-deployment.yaml` hard-fails at `helm template` time with *"No database connection configured"* unless one of: `database.postgres.bundled.enabled: true` (default), `database.postgres.url`, or `database.postgres.urlFile`. There is **no SQLite / DB-less mode**. So `bundled.enabled: false` is only safe when paired with an external Postgres URL — disabling it alone makes the Argo app go `Unknown`/`ComparisonError` and nothing deploys. On a small cluster, keep bundled on (~256Mi + a PVC) unless you have an external PG.
 - The chart **always** renders a default `ModelConfig` from `providers.default` (→ Secret `kagent-openai`/`OPENAI_API_KEY`). It does **not** crashloop the controller if that Secret is absent — only an *agent using it* fails at call time. Author your **own** `ModelConfig` and reference it from your Agent; ignore the default. (`providers.openAI.baseUrl` is **not** a values key — set `baseUrl` on your own ModelConfig CR.)
 - Helm silently ignores unknown values keys, so a mistyped disable-key leaves that component **on**. Verify against the pinned `values.yaml`, don't trust inferred names.
 
