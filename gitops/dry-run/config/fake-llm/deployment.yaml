@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fake-llm
+  labels:
+    app: fake-llm
+    app.kubernetes.io/part-of: kagent-jwt-dryrun
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fake-llm
+  template:
+    metadata:
+      labels:
+        app: fake-llm
+        app.kubernetes.io/part-of: kagent-jwt-dryrun
+    spec:
+      containers:
+        - name: server
+          image: python:3.12-alpine
+          command: ["python", "/app/server.py"]
+          env:
+            - name: PORT
+              value: "8080"
+            - name: TOOL_NAME
+              value: "echo"
+            - name: MODEL_NAME
+              value: "fake-gpt"
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /v1/models
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          volumeMounts:
+            - name: server
+              mountPath: /app
+      volumes:
+        - name: server
+          configMap:
+            name: fake-llm-server
