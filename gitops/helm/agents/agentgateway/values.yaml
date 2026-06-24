@@ -1,0 +1,38 @@
+# agentgateway control-plane values — EnterpriseClaw.
+# Keys VERIFIED against controller/install/helm/agentgateway/values.yaml @ v1.3.1 (2026-06-24).
+# Helm silently ignores unknown keys, so a typo leaves a component at its default — re-verify names
+# against the pinned chart before trusting them.
+#
+# WHAT THIS CHART IS: a kgateway-derived Gateway-API *control plane* (a controller + an xDS gRPC server,
+# port 9978) that provisions agentgateway L7 *data-plane* proxies from Gateway/HTTPRoute CRs
+# (gatewayClassName: agentgateway). The Kubernetes Gateway API is its CONFIGURATION API and is ALWAYS
+# used — it is NOT an alternative to Istio. (The chart ships only agentgateway.dev CRDs; the
+# gateway.networking.k8s.io CRDs come from Istio, which stays their sole owner — so no CRD collision.)
+#
+# WHAT "USE ISTIO" MEANS HERE (the project decision): mesh-integrate those proxies into Istio ambient.
+# Each agentgateway proxy then gets a SPIFFE/mTLS identity from istiod (the *workload* identity rail)
+# while agentgateway enforces the Keycloak user-JWT at L7 (the *user* identity rail). That is exactly the
+# CLAUDE.md §2.2 "agentgateway as the Istio ambient L7 waypoint" model: Istio remains the cluster's
+# ingress gateway + mesh; agentgateway owns only its own `agentgateway` GatewayClass for agent/MCP/A2A L7.
+
+# --- Istio mesh integration: the enforcement this project requires ---
+istio:
+  autoEnabled: true          # every built-in-class (agentgateway) gateway joins the Istio mesh BY DEFAULT.
+                             # (A specific gateway can still opt out via AgentgatewayParameters spec.istio.enabled=false —
+                             #  used for the bare dry-run cluster, which has no istiod yet.)
+  namespace: istio-system    # where istiod runs; caAddress defaults to https://istiod.istio-system.svc:15012
+  # revision / clusterId / network: leave default unless istiod is revisioned or multi-cluster.
+
+# --- small-cluster footprint for the controller ---
+controller:
+  replicaCount: 1
+  logLevel: info
+resources:                   # bound it for a small node. GOMEMLIMIT/GOMAXPROCS are derived from these
+  requests: { cpu: 50m, memory: 128Mi }   # limits via the downward API, so always set explicit limits here.
+  limits:   { cpu: 1,   memory: 256Mi }
+
+# Off: no Prometheus Operator CRDs on this cluster, and no local inference workloads.
+inferenceExtension:
+  enabled: false
+monitoring:
+  enabled: false

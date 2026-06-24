@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: agentgateway-crds
+  namespace: argocd
+  annotations:
+    # agentgateway.dev CRDs first (AgentgatewayBackend/Parameters/Policy). NOTE: this chart does NOT
+    # ship the gateway.networking.k8s.io CRDs — Istio owns those, so there is no Gateway-API collision.
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    chart: agentgateway-crds
+    repoURL: cr.agentgateway.dev/charts   # OCI Helm chart (Helm-format source: no oci:// prefix); anonymous pull
+    targetRevision: 1.3.1                  # last agentgateway line compatible with kagent 0.9.9 / kmcp 0.3.0
+    helm:
+      releaseName: agentgateway-crds
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: agentgateway-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true   # CRDs can exceed the last-applied-config annotation size limit

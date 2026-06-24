@@ -1,0 +1,34 @@
+# DRY-RUN ONLY. Installs the Kubernetes Gateway API CRDs (gateway.networking.k8s.io) on the bare VM.
+#
+# Why this is dry-run-only: the agentgateway control plane is a Gateway-API controller — it watches
+# Gateway/HTTPRoute and will not become Ready without these CRDs. In PROD, Istio supplies them (Istio
+# is the sole Gateway-API CRD owner), so there is NO equivalent app under gitops/helm/. On this bare
+# Cilium VM nothing provides them, so we install the upstream standard channel here.
+#
+# Version: standard channel @ v1.5.1 (latest stable). The agentgateway 1.3.1 controller builds against
+# gateway-api v1.6.0-rc.1, but the v1 API surface (GatewayClass/Gateway/HTTPRoute/...) is stable across
+# 1.5/1.6, and v1.5.1's standard channel already includes ListenerSet + BackendTLSPolicy. Bump to
+# v1.6.0-rc.1 or the experimental channel only if the controller logs a missing-CRD informer error.
+#
+# Cross-app ordering vs. the agentgateway controller relies on Argo retry/selfHeal (no parent app-of-apps
+# enforces sync-waves across separate Applications here) — the controller retries until these land.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gateway-api-crds
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kubernetes-sigs/gateway-api
+    targetRevision: v1.5.1
+    path: config/crd            # self-contained kustomization (standard-channel CRDs)
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default          # CRDs are cluster-scoped; this is only the Argo bookkeeping namespace
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true    # Gateway API CRDs are large — avoid the last-applied-config size limit

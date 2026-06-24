@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: agentgateway
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"   # control plane after its CRDs (wave 0)
+spec:
+  project: default
+  sources:
+    - chart: agentgateway
+      repoURL: cr.agentgateway.dev/charts   # OCI Helm chart: the agentgateway control plane (Gateway-API/xDS controller)
+      targetRevision: 1.3.1
+      helm:
+        releaseName: agentgateway
+        valueFiles:
+          - $values/gitops/helm/agents/agentgateway/values.yaml
+    - repoURL: https://github.com/jdarguello/EnterpriseClaw
+      targetRevision: main
+      ref: values
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: agentgateway-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

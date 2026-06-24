@@ -10,9 +10,25 @@ Verified 2026-06-24 against kagent **v0.9.9** / agentgateway **v1.3.1**. Pre-1.0
 | kagent chart | `oci://ghcr.io/kagent-dev/kagent/helm/kagent` | bundles **kmcp** (≥0.7) + UI + tools + sample agents |
 | kagent images | registry `cr.kagent.dev` (chart `registry:` default) | app/image tag tracks git `vX.Y.Z` |
 | agentgateway standalone | `ghcr.io/agentgateway/agentgateway:v1.3.1` | **`v` prefix required** (`1.3.1` 404s); entrypoint `/app/agentgateway`, run `-f <config>` |
-| agentgateway K8s chart | `oci://cr.agentgateway.dev/charts/agentgateway` | Gateway-API; `gatewayClassName: agentgateway`; needs Gateway-API CRDs |
+| agentgateway CRDs chart | `oci://cr.agentgateway.dev/charts/agentgateway-crds` | ships ONLY `agentgateway.dev` CRDs (Backend/Parameters/Policy) — **NOT** `gateway.networking.k8s.io` |
+| agentgateway chart | `oci://cr.agentgateway.dev/charts/agentgateway` | the **control plane** (controller + xDS :9978); provisions L7 proxies from Gateway CRs |
 
-Default install namespace: **`kagent`**.
+Chart registry/version: **`cr.agentgateway.dev/charts/{agentgateway,agentgateway-crds}` @ `1.3.1`** (anonymous OCI pull — no creds, like public ghcr; the in-repo `Chart.yaml` `0.0.2` is a dev placeholder, real version injected at release). 1.3.x is the line that pairs with **kagent 0.9.9** (a newer agentgateway 2.2.x line exists — do not jump to it without re-checking kagent compat). Default install namespace: **`kagent`** for the kagent trio; **`agentgateway-system`** for the agentgateway control plane.
+
+## agentgateway Helm chart = a Gateway-API control plane (NOT "standalone vs Istio")
+
+The `agentgateway` chart (v1.3.1, chart 0.0.2) is **kgateway-derived**: a controller + xDS gRPC server (`:9978`) that watches `Gateway`/`HTTPRoute` CRs (`gatewayClassName: agentgateway`) and provisions agentgateway **data-plane** proxies. So the **Kubernetes Gateway API is its config API and is ALWAYS used** — it is *not* an alternative to Istio, and you can't "turn Gateway API off" via values. Verified template set: `deployment.yaml` (the `controller` container), `service.yaml`, `serviceaccount.yaml`, `role.yaml`, hpa/vpa/pdb, `monitoring.yaml`. No GatewayClass template (the controller registers the built-in `agentgateway` class itself).
+
+**"Use Istio" is a first-class values block, and it means mesh-integration (the waypoint model), not replacing Gateway API:**
+```yaml
+istio:
+  autoEnabled: true        # every built-in-class (agentgateway) gateway joins the Istio mesh by default
+  namespace: istio-system  # istiod location; caAddress defaults to https://istiod.istio-system.svc:15012
+  # revision / clusterId / network: for revisioned or multi-cluster istiod
+```
+`autoEnabled: true` → the provisioned proxies get SPIFFE/mTLS identities from istiod (the workload rail) while agentgateway enforces the user JWT at L7 — the CLAUDE.md §2.2 waypoint. A specific gateway can opt out with `AgentgatewayParameters spec.istio.enabled=false`. EnterpriseClaw set: [gitops/helm/agents/agentgateway/](../../../../gitops/helm/agents/agentgateway/).
+
+**Hard prerequisites to deploy this chart at all:** (1) the **`gateway.networking.k8s.io` CRDs** must exist (the controller's informers need them) — they come from **Istio** (this chart does *not* ship them); (2) for *meshed* gateways (`autoEnabled: true`), **istiod** must be reachable. On a bare cluster with neither (e.g. the dry-run VM), install Istio (or at least the Gateway-API CRDs) first, or the controller can't function. Other knobs: `controller.{replicaCount,logLevel}`, `resources` (GOMEMLIMIT/GOMAXPROCS derive from `limits.memory`/`limits.cpu` via the downward API — always set explicit limits), `inferenceExtension.enabled`, `monitoring.enabled` (needs Prometheus-Operator CRDs).
 
 ## Resolving the real chart version (the pagination trap)
 
