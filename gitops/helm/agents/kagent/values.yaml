@@ -14,8 +14,8 @@ ui:
   replicas: 0                 # no dashboard Deployment (no documented ui.enabled; replicas:0 works)
 
 kmcp:
-  enabled: true               # part of the trio: the on-cluster MCPServer controller.
-                              # First toggle to flip to `false` if the controller pod can't be scheduled.
+  enabled: false              # installed as its OWN Helm app (gitops/helm/agents/kmcp) so there is
+                              # exactly one kmcp controller. Disabling the bundled subchart here.
 
 kagent-tools:
   enabled: false              # built-in tool server; off unless an agent uses it

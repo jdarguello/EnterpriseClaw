@@ -1,0 +1,40 @@
+# Dry-run ApplicationSet — installs the kagent trio from the PUBLIC repo via GitOps.
+#
+# Mirrors the project's `helm` ApplicationSet (git directory generator), but points directly at
+# the public repo (no private-repo overlay) since this is the local-cluster dry-run. It discovers
+# every Helm install under gitops/helm/agents/* and creates one Argo CD Application per directory.
+#
+# Generates: agents-kagent-crds, agents-kmcp-crds (CRDs, wave 0),
+#            agents-kagent, agents-kmcp (controllers, wave 1).
+# Each generated app renders that directory's helm-app.yaml (the actual chart Application).
+# Add a new chart dir under gitops/helm/agents/ and it is onboarded automatically on next sync.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: agents
+  namespace: argocd
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/jdarguello/EnterpriseClaw
+        revision: main
+        directories:
+          - path: gitops/helm/agents/*
+  template:
+    metadata:
+      name: "agents-{{path.basename}}"
+      labels:
+        app.kubernetes.io/part-of: agents
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/jdarguello/EnterpriseClaw
+        targetRevision: main
+        path: "{{path}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: argocd
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true

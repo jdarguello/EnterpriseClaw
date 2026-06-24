@@ -1,0 +1,6 @@
+# Trimmed kmcp values (small / dry-run cluster).
+# Keys verified against helm/kmcp/values.yaml (kmcp 0.3.0). The chart deploys ONLY the controller
+# (image ghcr.io/kagent-dev/kmcp/controller, 1 replica, req cpu 10m/mem 64Mi) — already lightweight.
+
+rbac:
+  namespaces: ["kagent"]   # namespaced Role/RoleBinding; WATCH_NAMESPACES=kagent (no cluster-scoped RBAC)

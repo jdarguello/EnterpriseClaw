@@ -1,4 +1,12 @@
+# Group aggregator for the kagent-trio Helm installs (the prod app-of-apps path).
+# The dry-run installs these via gitops/dry-run/agents-appset.yaml (a directory generator that
+# globs the leaf dirs directly), so this file is only the prod group-level aggregator.
+# CRDs (sync-wave 0) listed before controllers (sync-wave 1) for readability.
 resources:
 - kagent-crds/
+- kmcp-crds/
 - kagent/
-# - agentgateway/   # added once the chart-vs-standalone shape is decided (see SKILL: jwt-propagation dry-run)
+- kmcp/
+# agentgateway is intentionally NOT a Helm app here: Istio is the project's sole gateway /
+# Gateway-API implementation. agentgateway runs as the Istio ambient L7 waypoint (prod) and as a
+# standalone Deployment for the dry-run (gitops/config/agentgateway/).
