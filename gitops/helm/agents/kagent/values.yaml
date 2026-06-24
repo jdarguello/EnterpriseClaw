@@ -17,7 +17,10 @@ database:
         limits:   { cpu: 500m, memory: 512Mi }
 
 ui:
-  replicas: 0                 # no dashboard Deployment (no documented ui.enabled; replicas:0 works)
+  replicas: 1                 # kagent dashboard (Next.js); ClusterIP :8080; image from cr.kagent.dev.
+  resources:                  # bound it for the small node (chart default limit is 1Gi)
+    requests: { cpu: 50m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 640Mi }
 
 kmcp:
   enabled: false              # installed as its OWN Helm app (gitops/helm/agents/kmcp) so there is
