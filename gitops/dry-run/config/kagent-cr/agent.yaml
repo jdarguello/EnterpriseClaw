@@ -1,0 +1,28 @@
+# Declarative agent for the JWT-propagation probe. The fake-LLM forces a single `echo` tool call;
+# the agent then returns the tool result (the headers echo-MCP received).
+#
+# THE KEY KNOB: declarative.tools[].mcpServer.allowedHeaders. This is kagent's native header
+# passthrough (fallback-ladder step 1). With ["Authorization"], the inbound A2A bearer SHOULD be
+# forwarded to the echo-MCP tool call. The dry-run confirms whether it actually is.
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: echo-agent
+  namespace: kagent
+spec:
+  type: Declarative
+  description: "Dry-run agent: calls the echo MCP tool to probe whether the user JWT propagates kagent -> MCP."
+  declarative:
+    modelConfig: fake-llm
+    systemMessage: |
+      You are a dry-run probe. For any user message, call the `echo` tool exactly once and then
+      return its result verbatim, with no extra commentary.
+    a2aConfig: {}   # presence instantiates the per-agent A2A server (message/send) on the HTTP port
+    tools:
+      - type: McpServer
+        mcpServer:
+          kind: RemoteMCPServer
+          apiGroup: kagent.dev
+          name: echo-mcp
+          toolNames: ["echo"]
+          allowedHeaders: ["Authorization"]   # forward the inbound user bearer to the MCP tool call

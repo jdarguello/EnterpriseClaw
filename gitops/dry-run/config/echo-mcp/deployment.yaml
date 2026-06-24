@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-mcp
+  labels:
+    app: echo-mcp
+    app.kubernetes.io/part-of: kagent-jwt-dryrun
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echo-mcp
+  template:
+    metadata:
+      labels:
+        app: echo-mcp
+        app.kubernetes.io/part-of: kagent-jwt-dryrun
+    spec:
+      containers:
+        - name: server
+          image: python:3.12-alpine   # same base as fake-llm -> one cached pull on this VM
+          command: ["python", "/app/server.py"]
+          env:
+            - name: PORT
+              value: "8080"
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          volumeMounts:
+            - name: server
+              mountPath: /app
+      volumes:
+        - name: server
+          configMap:
+            name: echo-mcp-server

@@ -1,0 +1,14 @@
+# Points kagent at the in-cluster fake-LLM (deterministic tool_call) instead of Bedrock, so the
+# dry-run isolates JWT propagation from the model hop.
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: fake-llm
+  namespace: kagent
+spec:
+  provider: OpenAI
+  model: fake-gpt
+  apiKeySecret: dryrun-llm-key
+  apiKeySecretKey: OPENAI_API_KEY
+  openAI:
+    baseUrl: http://fake-llm.kagent.svc.cluster.local:8080/v1

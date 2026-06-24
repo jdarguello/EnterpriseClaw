@@ -37,6 +37,11 @@ controller:
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits:   { cpu: 1,   memory: 512Mi }
+  auth:
+    mode: trusted-proxy   # ingest the user JWT from the inbound Authorization header (vs. "unsecure",
+                          # which uses X-User-Id / admin@kagent.dev). Required for the JWT-propagation
+                          # dry-run: kagent must read the bearer before it can forward it to MCP tools.
+    userIdClaim: sub      # JWT claim used as the kagent user id
 
 rbac:
   namespaces: ["kagent"]      # namespaced Role/RoleBinding instead of a cluster-scoped ClusterRole
