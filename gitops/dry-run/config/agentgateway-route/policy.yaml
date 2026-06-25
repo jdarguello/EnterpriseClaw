@@ -1,46 +1,47 @@
-# The iteration-2 policy, attached to the echo-MCP AgentgatewayBackend.
+# Iteration-2 stage B: agentgateway VALIDATES the user JWT (enterpriseclaw realm) and CLAIM-GATES
+# access on the mcp-user realm role.
 #
-# STAGE A (now, synthetic alg:none token): proves the L7 waypoint preserves the bearer
-# (kagent -> agentgateway -> echo-MCP) — the analog of iteration 1 but with the extra hop.
-# FINDING (2026-06-25 negative control): for MCP backends agentgateway forwards the inbound
-# Authorization to the upstream by DEFAULT — with this whole policy DELETED the bearer still
-# arrived. So backend.auth.passthrough below is NOT what makes the bearer survive; it's kept
-# explicit only to document intent. backend.auth exists to INJECT/REPLACE upstream creds
-# (aws SigV4 / static key) — the LLM-gateway Bedrock path, not the user-bearer path.
-# No JWKS validation in stage A, so a synthetic token works.
-#
-# STAGE B (real RS256 Keycloak token): uncomment the `mcp` block to (1) validate the bearer against
-# Keycloak JWKS and (2) claim-gate the `echo` tool with a CEL matchExpression. A synthetic alg:none
-# token would be REJECTED at validation — stage B requires the real token (realm + creds from the user).
+# 1.3.1 findings that shaped this (see jwt-propagation.md):
+#  - backend.mcp.authentication is UNUSABLE: CRD exposes only a remote jwks backendRef, but the
+#    runtime NACKs demanding jwks_inline. So JWT validation must live in traffic.jwtAuthentication.
+#  - backend.mcp.authorization does NOT see jwt.* when validation is at traffic level (it filtered
+#    echo even for a user WITH the role). So authorization is kept at the SAME (traffic) level as
+#    validation, where jwt.* is in scope. For a single-tool MCP this route-gate is equivalent to a
+#    tool-gate; tool-name granularity (mcp.tool.name) is a refinement to revisit on a newer release.
+#  - mode: Strict is REQUIRED: only Strict populates jwt.* into the authorization CEL context (and
+#    rejects tokenless=401 / forged=401). Permissive lets tokenless through but leaves jwt.* EMPTY,
+#    so the authz CEL then denies even a VALID token; Optional also 401s tokenless MCP requests.
+#    Caveat: Strict 401s the kagent controller's tokenless tool DISCOVERY — so end-to-end through
+#    kagent needs a discovery token on RemoteMCPServer.headersFrom (open item). This direct-to-gateway
+#    config is the proven enforcement; PASSED 2026-06-25: alice(mcp-user)->echo; bob/no-token/forged->denied.
 apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayPolicy
 metadata:
-  name: echo-mcp-policy
+  name: echo-mcp-jwt
   namespace: kagent
 spec:
   targetRefs:
-    - group: agentgateway.dev
-      kind: AgentgatewayBackend
-      name: echo-mcp-backend
-  backend:
-    auth:
-      passthrough: {}            # forward the inbound user bearer upstream to echo-MCP
-    # --- STAGE B: real Keycloak token (fill issuer/realm/aud + required claim, then uncomment) ---
-    # mcp:
-    #   authentication:
-    #     mode: Strict
-    #     provider: Keycloak
-    #     issuer: "https://<keycloak-host>/realms/<realm>"
-    #     audiences: ["<aud>"]
-    #     jwks:
-    #       backendRef:
-    #         name: keycloak
-    #         namespace: keycloak
-    #         port: 8080
-    #       jwksPath: /realms/<realm>/protocol/openid-connect/certs
-    #   authorization:
-    #     action: Allow
-    #     policy:
-    #       matchExpressions:
-    #         # allow the echo tool only when the JWT carries the required role
-    #         - 'mcp.tool.name == "echo" && "<required-role>" in jwt.realm_access.roles'
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: echo-mcp-route
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      providers:
+        - issuer: "http://keycloak.keycloak.svc/realms/enterpriseclaw"
+          audiences: ["enterpriseclaw-agents"]
+          jwks:
+            remote:
+              backendRef:
+                group: ""
+                kind: Service
+                name: keycloak
+                namespace: keycloak
+                port: 80
+              jwksPath: /realms/enterpriseclaw/protocol/openid-connect/certs
+    authorization:
+      action: Allow            # allow requests matching an expression; deny all others
+      policy:
+        matchExpressions:
+          # gate access on the mcp-user realm role carried in the validated JWT (nested claim)
+          - '"mcp-user" in jwt.realm_access.roles'

@@ -179,24 +179,30 @@ spec:
             backendRefs: [{ group: agentgateway.dev, kind: AgentgatewayBackend, name: echo-mcp-backend }] }]
 ```
 
-`AgentgatewayPolicy` is the auth/authz plane. Three relevant blocks (attach via `spec.targetRefs`; precedence Gateway < Listener < Route < Backend):
-- **`traffic.jwtAuthentication`** (attach to the HTTPRoute) — JWKS validation of the user JWT. `mode: Strict|Permissive|Optional`; `providers[].{issuer, audiences, jwks.{inline | remote.{backendRef, jwksPath}}}`; `mcp.provider: Keycloak|Auth0|Okta` for MCP OAuth resource-metadata. **inline JWKS** is available here (handy for self-signed tests).
-- **`backend.auth`** (attach to the Backend) — how the proxy authenticates *to* the upstream: `passthrough: {}` (forward incoming auth — but **for MCP backends this is the default**, see `jwt-propagation.md`), or `aws`(SigV4)/`azure`/`gcp`/`key`/`secretRef` to **inject/replace** creds (this is the LLM-gateway Bedrock IRSA path).
-- **`backend.mcp`** (attach to the Backend) — MCP-specific: `authentication` (JWKS, **remote-only** `backendRef`, with `provider: Keycloak`) + **`authorization.{action: Allow|Deny|Require, policy.matchExpressions[]}`** = tool-level CEL. CEL context includes `mcp.tool.name` and `jwt.*` claims; multiple `matchExpressions` are OR'd. Example: `'mcp.tool.name == "echo" && "platform-eng" in jwt.realm_access.roles'`.
+`AgentgatewayPolicy` is the auth/authz plane (attach via `spec.targetRefs`; precedence Gateway < Listener < Route < Backend). **VERIFIED working shape for "validate Keycloak JWT + claim-gate an MCP" on 1.3.1 (dry-run iter2 stage B): do BOTH `jwtAuthentication` and `authorization` under `traffic`, attached to the HTTPRoute.**
+- **`traffic.jwtAuthentication`** (attach to the HTTPRoute) — JWKS validation. `mode: Strict|Permissive|Optional`; `providers[].{issuer, audiences, jwks.{inline | remote.{backendRef, jwksPath}}}`. **Use `Strict`** — only `Strict` populates `jwt.*` for the authz CEL (and rejects tokenless/forged); `Permissive` lets tokenless through but leaves `jwt.*` empty so authz denies even valid tokens. `inline` JWKS available (self-signed tests); `remote.backendRef` → the Keycloak Service.
+- **`traffic.authorization`** (attach to the HTTPRoute) — `{action: Allow|Deny|Require, policy.matchExpressions[]}` CEL. **`jwt.*` is in scope here** (same traffic level as validation). Nested Keycloak claims work: `'"mcp-user" in jwt.realm_access.roles'`. For a single-tool MCP this route-gate == a tool-gate.
+- **`backend.auth`** (attach to the Backend) — proxy→upstream auth: `passthrough: {}` re-forwards the incoming bearer (NB: with `jwtAuthentication` active the validated bearer is otherwise **consumed** at the gateway; without jwt, MCP backends forward by default), or `aws`(SigV4)/`key`/`secretRef` to **inject/replace** creds (LLM-gateway Bedrock IRSA path).
+- ⚠️ **`backend.mcp.authentication` — DO NOT USE on 1.3.1.** CRD exposes only a remote `jwks.backendRef`, but the runtime NACKs *"MCP Authentication requires jwks_inline to be set."* And `backend.mcp.authorization` does **not** see `jwt.*` when validation is route-level (it filtered the tool even for an authorized user). Per-`mcp.tool.name` granularity is therefore unconfirmed on 1.3.1 — gate at `traffic` level instead.
 
 ```yaml
 apiVersion: agentgateway.dev/v1alpha1
-kind: AgentgatewayPolicy
+kind: AgentgatewayPolicy           # VERIFIED 1.3.1 — validate Keycloak JWT + claim-gate
 spec:
-  targetRefs: [{ group: agentgateway.dev, kind: AgentgatewayBackend, name: echo-mcp-backend }]
-  backend:
-    auth: { passthrough: {} }              # explicit intent; MCP backends forward by default anyway
-    mcp:
-      authentication: { mode: Strict, provider: Keycloak, issuer: "https://…/realms/<realm>",
-                        audiences: ["<aud>"],
-                        jwks: { backendRef: { name: keycloak, namespace: keycloak, port: 80 },
-                                jwksPath: /realms/<realm>/protocol/openid-connect/certs } }
-      authorization: { action: Allow, policy: { matchExpressions: ['mcp.tool.name == "echo" && "<role>" in jwt.realm_access.roles'] } }
+  targetRefs: [{ group: gateway.networking.k8s.io, kind: HTTPRoute, name: echo-mcp-route }]
+  traffic:
+    jwtAuthentication:
+      mode: Strict                 # Strict populates jwt.* for the CEL below; Permissive does NOT
+      providers:
+        - issuer: "http://keycloak.keycloak.svc/realms/<realm>"   # must equal the token's iss byte-for-byte
+          audiences: ["<aud>"]
+          jwks:
+            remote:
+              backendRef: { group: "", kind: Service, name: keycloak, namespace: keycloak, port: 80 }
+              jwksPath: /realms/<realm>/protocol/openid-connect/certs
+    authorization:
+      action: Allow                # allow matching requests; deny the rest
+      policy: { matchExpressions: ['"mcp-user" in jwt.realm_access.roles'] }
 ```
 
 Status checks: `Gateway` → `Programmed=True`; `HTTPRoute` → `ResolvedRefs=True` (backend resolved); `AgentgatewayBackend` → `Accepted=True`; `AgentgatewayPolicy` → `Accepted=True` **and `Attached=True`** (attached to its target). Proxy access log lines carry `protocol=mcp mcp.method.name=… mcp.target=… gen_ai.tool.name=…` — the place to confirm an MCP call actually traversed the waypoint.
