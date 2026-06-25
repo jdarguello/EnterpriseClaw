@@ -57,13 +57,19 @@ Bedrock-via-agentgateway (EnterpriseClaw LLM-gateway shape): `provider: Bedrock`
 
 `tools[]` item:
 ```yaml
-- type: McpServer
+- type: McpServer            # McpServer | Agent
   mcpServer:
     name: echo-mcp            # name of a RemoteMCPServer / MCPServer / Agent CR
     kind: RemoteMCPServer     # RemoteMCPServer | MCPServer | Agent
     apiGroup: kagent.dev
     toolNames: ["echo"]       # which tools from that server this agent may call
+    allowedHeaders:           # *** dynamic incoming-header passthrough to the MCP (see callout) ***
+      - Authorization
+    # requireApproval: ["..."]  # tool names that need human approval before calling
+    # namespace: <ns>           # if the referenced server CR lives in another namespace
 ```
+
+> **`allowedHeaders` IS the user-JWT propagation mechanism at the kagent hop** — VERIFIED 2026-06-25 (dry-run iteration 1). It **dynamically forwards the listed inbound A2A request headers to the MCP tool call, intact / pass-through (not re-minted)**. Confirmed with an echo-MCP: the exact `Authorization: Bearer <jwt>` sent to the agent reappeared in the MCP's received headers. This is **distinct** from `RemoteMCPServer.headersFrom` (which is *static*, from a Secret). Two more findings: (1) it works **independent of `controller.auth.mode`** — the header forwards even when you hit the agent pod directly (bypassing the controller's trusted-proxy user extraction); (2) field lives on the **Agent's tool ref**, NOT on `RemoteMCPServer`. So an MCP behind kagent only ever sees a header you explicitly allow-list here.
 
 Minimal:
 ```yaml
@@ -81,14 +87,27 @@ spec:
       then report the headers it returned.
     tools:
       - type: McpServer
-        mcpServer: { name: echo-mcp, kind: RemoteMCPServer, apiGroup: kagent.dev, toolNames: ["echo"] }
-    a2aConfig:
-      skills:
-        - id: probe
-          name: Header probe
-          description: Calls echo and returns received headers.
-          tags: ["dry-run"]
+        mcpServer:
+          name: echo-mcp
+          kind: RemoteMCPServer
+          apiGroup: kagent.dev
+          toolNames: ["echo"]
+          allowedHeaders: ["Authorization"]   # forward the inbound user bearer to the MCP
+    a2aConfig: {}        # presence (even empty) instantiates the per-agent A2A server; `skills` is optional
 ```
+
+### Reaching a Declarative agent over A2A (verified 2026-06-25)
+
+`a2aConfig` (even `{}`) runs a **per-agent A2A server on the pod's HTTP port `:8080`**, exposed as a ClusterIP Service `<agent-name>.<ns>` (e.g. `echo-agent.kagent:8080`). A2A goes **straight to the agent pod, NOT through the controller** (`kagent-controller:8083` does not serve the agent card).
+
+- Agent card: `GET /.well-known/agent-card.json` (also `/.well-known/agent.json`) → `preferredTransport: JSONRPC`, `protocolVersion: 0.3`, `url` = the JSON-RPC endpoint (the pod base URL).
+- Drive a tool call with JSON-RPC `message/send` (A2A 0.3 — note `kind`, not `type`, on parts):
+  ```json
+  {"jsonrpc":"2.0","id":"1","method":"message/send",
+   "params":{"message":{"role":"user","kind":"message",
+     "parts":[{"kind":"text","text":"..."}],"messageId":"<uuid>"}}}
+  ```
+- Response = a Task: `result.history[]` carries the model turns incl. the tool `function_call` / `function_response` (the MCP's returned content is here), plus `result.artifacts[]` with the final text. `result.history[].metadata.kagent_user_id` shows the resolved user — `A2A_USER_<contextId>` when hit directly (controller trusted-proxy not in path).
 
 ---
 

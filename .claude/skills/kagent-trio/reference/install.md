@@ -9,6 +9,7 @@ Verified 2026-06-24 against kagent **v0.9.9** / agentgateway **v1.3.1**. Pre-1.0
 | kagent CRDs chart | `oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds` | install **first** |
 | kagent chart | `oci://ghcr.io/kagent-dev/kagent/helm/kagent` | bundles **kmcp** (≥0.7) + UI + tools + sample agents |
 | kagent images | registry `cr.kagent.dev` (chart `registry:` default) | app/image tag tracks git `vX.Y.Z` |
+| declarative-agent runtime | `cr.kagent.dev/kagent-dev/kagent/app@sha256:…` | the pod each `Agent` (type Declarative) runs. **LARGE** — first agent triggered a **~24 min** pull on the dry-run VM (one-time, then cached). Budget for it; pre-pull on each node if impatient. |
 | agentgateway standalone | `ghcr.io/agentgateway/agentgateway:v1.3.1` | **`v` prefix required** (`1.3.1` 404s); entrypoint `/app/agentgateway`, run `-f <config>` |
 | agentgateway CRDs chart | `oci://cr.agentgateway.dev/charts/agentgateway-crds` | ships ONLY `agentgateway.dev` CRDs (Backend/Parameters/Policy) — **NOT** `gateway.networking.k8s.io` |
 | agentgateway chart | `oci://cr.agentgateway.dev/charts/agentgateway` | the **control plane** (controller + xDS :9978); provisions L7 proxies from Gateway CRs |
