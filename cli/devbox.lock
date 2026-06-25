@@ -685,6 +685,54 @@
         }
       }
     },
+    "operator-sdk@1.42.2": {
+      "last_modified": "2026-05-21T08:15:18Z",
+      "resolved": "github:NixOS/nixpkgs/4a29d733e8a7d5b824c3d8c958a946a9867b3eb2#operator-sdk",
+      "source": "devbox-search",
+      "version": "1.42.2",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/4s6j3cc5skrwm4qxv8izbzjx3k9nfgk0-operator-sdk-1.42.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/4s6j3cc5skrwm4qxv8izbzjx3k9nfgk0-operator-sdk-1.42.2"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/jakvn3vd1x9kd2cblz9s8n48f4c9jj0p-operator-sdk-1.42.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/jakvn3vd1x9kd2cblz9s8n48f4c9jj0p-operator-sdk-1.42.2"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/x8h4vaa7ampdvgpmmnb6k5c166ina5zx-operator-sdk-1.42.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/x8h4vaa7ampdvgpmmnb6k5c166ina5zx-operator-sdk-1.42.2"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/d9v3rp55ix8m35c0aqx89k0d3gzl0qz2-operator-sdk-1.42.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/d9v3rp55ix8m35c0aqx89k0d3gzl0qz2-operator-sdk-1.42.2"
+        }
+      }
+    },
     "podman@5.8.2": {
       "last_modified": "2026-05-07T03:23:16Z",
       "resolved": "github:NixOS/nixpkgs/68a8af93ff4297686cb68880845e61e5e2e41d92#podman",
