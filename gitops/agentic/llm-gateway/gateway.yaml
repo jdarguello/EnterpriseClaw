@@ -1,0 +1,25 @@
+# The agentgateway L7 proxy that fronts AWS Bedrock as the LLM gateway for the agentic stack.
+#
+# Creating a Gateway with gatewayClassName `agentgateway` makes the agentgateway controller
+# provision a data-plane proxy (Deployment + Service named after this Gateway: `agentic-gw`).
+# kagent's ModelConfig points at this proxy's Service (agentic-gw.kagent:8080) instead of at
+# Bedrock directly, so every LLM call traverses the gateway — which holds the Bedrock identity
+# and signs SigV4 (backend.yaml).
+#
+# Co-located in `kagent` (mesh-less, mirroring the proven dry-run waypoint) so no cross-namespace
+# ReferenceGrant is needed and the proxy comes Ready without istio.autoEnabled meshing it. The
+# production waypoint is the ambient one in `agentgateway-system`; that hardening is a follow-up.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: agentic-gw
+  namespace: kagent
+spec:
+  gatewayClassName: agentgateway
+  listeners:
+    - name: http
+      port: 8080
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same

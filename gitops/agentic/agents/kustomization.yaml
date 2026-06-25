@@ -1,0 +1,7 @@
+# Aggregates every agent under gitops/agentic/agents/. Add a new agent as a subdirectory and list
+# it here; the `agentic` ApplicationSet syncs this whole directory as one Argo CD Application.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kagent          # kagent controller WATCH_NAMESPACES=kagent — CRs MUST live here
+resources:
+  - general-classifier

@@ -1,0 +1,41 @@
+# ApplicationSet for the agentic stack — the real agents/MCPs (kagent CRs), distinct from the
+# kagent-trio Helm INSTALL (gitops/helm/agents/*, driven by the `agents` ApplicationSet).
+#
+# Mirrors the project's git-directory-generator pattern: it discovers every directory under
+# gitops/agentic/* and creates one Argo CD Application per directory, each rendered from the PUBLIC
+# repo. Add a new component directory under gitops/agentic/ and it is onboarded automatically.
+#
+# Generates: agentic-llm-gateway (the agentgateway->Bedrock proxy), agentic-agents (the kagent
+# Agent + ModelConfig CRs), agentic-mcps (tool servers — empty for now).
+#
+# All CRs land in the `kagent` namespace (the kagent controller's WATCH_NAMESPACES).
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: agentic
+  namespace: argocd
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/jdarguello/EnterpriseClaw
+        revision: main
+        directories:
+          - path: gitops/agentic/*
+  template:
+    metadata:
+      name: "agentic-{{path.basename}}"
+      labels:
+        app.kubernetes.io/part-of: agentic
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/jdarguello/EnterpriseClaw
+        targetRevision: main
+        path: "{{path}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: kagent
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true

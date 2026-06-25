@@ -1,0 +1,10 @@
+# The agentgateway-as-LLM-gateway tier: the proxy Gateway, the Bedrock AI backend, and the route.
+# The real AWS-credential Secret (`bedrock-aws-creds`) is deliberately NOT here — it is created
+# out-of-band so credentials never land in this public repo.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kagent
+resources:
+  - gateway.yaml
+  - backend.yaml
+  - httproute.yaml

@@ -1,0 +1,31 @@
+# Declares AWS Bedrock (Claude Haiku 4.5) as an AI backend of the agentic-gw proxy. agentgateway
+# is OpenAI-compatible at the front and translates to the Bedrock InvokeModel API at the back,
+# signing requests with AWS SigV4.
+#
+# Shape verified against the installed agentgateway 1.3.1 CRD (`kubectl explain`):
+#   - spec.ai.provider.bedrock {model, region, guardrail}  (singular `provider` form)
+#   - spec.policies.auth.aws.secretRef                     (the no-IRSA credential path)
+#
+# AUTH on a LOCAL (non-EKS) cluster: there is no IRSA, so credentials come from a Kubernetes
+# Secret named `bedrock-aws-creds` with keys `accessKey` / `secretKey` (+ optional `sessionToken`).
+# That Secret holds REAL AWS credentials, so it is NOT committed to this public repo — create it
+# out-of-band on the cluster (see gitops/agentic/README implications). In production this whole
+# block is replaced by IRSA on the agentgateway ServiceAccount (omit `policies.auth` entirely).
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: bedrock-claude
+  namespace: kagent
+spec:
+  ai:
+    provider:
+      bedrock:
+        # Pinned so the demo can't drift on a model-id typo. Must match the ModelConfig and the
+        # account's enabled Bedrock inference profile (see modelconfig.yaml note).
+        model: us.anthropic.claude-haiku-4-5-20251001-v1:0
+        region: us-east-1
+  policies:
+    auth:
+      aws:
+        secretRef:
+          name: bedrock-aws-creds      # keys: accessKey, secretKey [, sessionToken] — created out-of-band

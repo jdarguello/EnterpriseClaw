@@ -1,0 +1,8 @@
+# Holds the kmcp-managed MCPServer / RemoteMCPServer definitions the agents call as tools.
+# Empty for now: the general-classifier is the JWT-less triage door and uses NO tools by design.
+# The first MCP to land here will be the GitHub MCP (the demo's PR-open path) — add its manifest
+# and list it under `resources:` and the `agentic` ApplicationSet will onboard it automatically.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kagent
+resources: []

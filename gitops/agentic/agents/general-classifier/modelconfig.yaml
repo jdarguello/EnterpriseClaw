@@ -1,0 +1,31 @@
+# Claude Haiku 4.5 on AWS Bedrock, reached THROUGH agentgateway as the LLM gateway.
+#
+# Decision (verified against the agentgateway docs/source): point kagent at the gateway as a BYO
+# OpenAI-compatible endpoint (`provider: OpenAI` + `openAI.baseUrl`), NOT `provider: Bedrock`.
+# `provider: Bedrock` would make kagent itself sign SigV4 to Bedrock, bypassing the gateway and
+# defeating the "agentgateway holds the Bedrock identity; the LLM hop is governed at the gateway"
+# design. agentgateway is OpenAI-compatible: kagent POSTs an OpenAI chat-completions body to
+# `<baseUrl>/chat/completions`, agentgateway translates OpenAI<->Bedrock and signs SigV4.
+#
+# The api key here is a DUMMY — the kagent OpenAI client just wants a non-empty key to initialize;
+# the REAL Bedrock credential lives on the agentgateway side (llm-gateway/backend.yaml secretRef).
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: bedrock-claude-haiku
+  namespace: kagent
+spec:
+  provider: OpenAI
+  # Bedrock inference-profile id for Claude Haiku 4.5. Pinned here AND on the backend for clarity.
+  # NOTE: confirm this exact string against the account's enabled Bedrock models/inference profiles
+  # (`aws bedrock list-inference-profiles`) — newer Claude models are only invocable via a
+  # cross-region inference profile (the `us.` prefix), not the bare `anthropic.claude-...` id.
+  model: us.anthropic.claude-haiku-4-5-20251001-v1:0
+  apiKeySecret: agentic-llm-gateway-key
+  apiKeySecretKey: OPENAI_API_KEY
+  openAI:
+    # The agentgateway proxy Service provisioned by the `agentic-gw` Gateway (llm-gateway/).
+    # kagent appends `/chat/completions`, giving `/v1/chat/completions` (matches the HTTPRoute).
+    baseUrl: http://agentic-gw.kagent.svc.cluster.local:8080/v1
+    temperature: "0"    # deterministic classification (kagent types this field as a string)
+    maxTokens: 256      # the classifier emits a tiny JSON object

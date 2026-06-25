@@ -1,0 +1,28 @@
+# Routes the OpenAI chat-completions path on the agentic-gw proxy to the Bedrock AI backend.
+# kagent's ModelConfig baseUrl ends in `/v1` and the OpenAI client appends `/chat/completions`,
+# so a PathPrefix `/v1` match covers it. backendRef points at an agentgateway.dev/AgentgatewayBackend
+# (not a Service), so agentgateway applies its AI handling + SigV4 signing.
+#
+# NOTE: there is intentionally NO AgentgatewayPolicy / JWT validation on this LLM route. The LLM
+# hop is authenticated by WORKLOAD identity (the gateway's Bedrock credential / IRSA), NOT by the
+# user JWT — they are two separate identity rails (§2.2). The user-JWT rail is enforced on the MCP
+# routes, not here.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: bedrock-llm-route
+  namespace: kagent
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: agentic-gw
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /v1
+      backendRefs:
+        - group: agentgateway.dev
+          kind: AgentgatewayBackend
+          name: bedrock-claude

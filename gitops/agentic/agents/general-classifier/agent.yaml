@@ -1,0 +1,51 @@
+# general-classifier — the FIRST real EnterpriseClaw agent.
+#
+# Role in the §2.2 architecture: the intent-classification / triage step. It reads the user's
+# inbound request and labels it `read-only` or `action`, returning STRUCTURED OUTPUT so the Argo
+# Workflow DAG can branch deterministically (read-only -> answer; action + authenticated -> proceed;
+# action + unauthenticated -> login wall).
+#
+# SECURITY POSTURE — this is the JWT-less triage door. It has NO tools / NO MCP servers by design:
+#   - `read-only` classification must work for unauthenticated users, so the agent must be reachable
+#     without a user JWT.
+#   - With no tools, a fully prompt-injected classifier still cannot reach anything — its SPIFFE
+#     principal is in no MCP's allow-list. The model is not the security boundary; the mesh is.
+#
+# Reachable over A2A (per-agent server on :8080, Service general-classifier.kagent).
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: general-classifier
+  namespace: kagent
+spec:
+  type: Declarative
+  description: >-
+    Classifies an inbound user request as 'read-only' or 'action'. The JWT-less triage door:
+    has no tools or MCP servers by design, so even a prompt-injected run cannot reach anything.
+  declarative:
+    modelConfig: bedrock-claude-haiku        # -> Claude Haiku 4.5 on Bedrock, via agentgateway
+    # NO tools: — intentional. This agent only classifies; it never acts.
+    systemMessage: |
+      You are the EnterpriseClaw general intent classifier. Your ONLY job is to read the user's
+      most recent request and classify its intent into exactly one category:
+
+      - "read-only": informational requests — questions, lookups, explanations, status checks. The
+        user wants information, not a change to any system. Usable by BOTH authenticated and
+        unauthenticated users.
+      - "action": the user wants the assistant to DO something that changes state or creates an
+        artifact — e.g. open a GitHub issue or pull request, provision a service, change
+        configuration, deploy. Only authenticated users may ultimately perform these; your job is
+        to DETECT the intent, not to authorize it.
+
+      Rules:
+      - Classify on intent, not on politeness or phrasing.
+      - If a request mixes both, classify it as "action" (the higher-privilege category).
+      - Do NOT attempt to fulfill the request. Do NOT call any tool — you have none.
+      - Respond with ONLY a single-line JSON object. No markdown, no code fences, no prose:
+        {"category": "read-only" | "action", "confidence": <number 0.0-1.0>, "reason": "<short>"}
+    a2aConfig:
+      skills:
+        - id: classify-intent
+          name: Classify intent
+          description: Classify a user request as 'read-only' or 'action'.
+          tags: ["triage", "classification", "intent"]
