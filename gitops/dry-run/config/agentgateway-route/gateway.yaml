@@ -1,0 +1,25 @@
+# Iteration 2: the agentgateway L7 waypoint that sits BETWEEN kagent and echo-MCP.
+#
+# Creating a Gateway with gatewayClassName `agentgateway` makes the agentgateway controller
+# provision a data-plane proxy (Deployment + Service) in this namespace. kagent's RemoteMCPServer
+# is repointed at this proxy's Service instead of echo-MCP directly, so every MCP tool call now
+# traverses the waypoint — which is where JWKS validation + mcpAuthorization live (stage B).
+#
+# Co-located in `kagent` (with echo-MCP + the AgentgatewayBackend) so no cross-namespace
+# ReferenceGrant is needed. Dry-run runs mesh-less to isolate the L7/JWT variable; production uses
+# the meshed ambient waypoint (istio.autoEnabled). If autoEnabled tries to mesh this proxy and it
+# won't come Ready, opt out with an AgentgatewayParameters (spec.istio.enabled: false).
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: agw-dryrun
+  namespace: kagent
+spec:
+  gatewayClassName: agentgateway
+  listeners:
+    - name: http
+      port: 8080
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same

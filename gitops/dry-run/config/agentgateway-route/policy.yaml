@@ -1,0 +1,46 @@
+# The iteration-2 policy, attached to the echo-MCP AgentgatewayBackend.
+#
+# STAGE A (now, synthetic alg:none token): proves the L7 waypoint preserves the bearer
+# (kagent -> agentgateway -> echo-MCP) — the analog of iteration 1 but with the extra hop.
+# FINDING (2026-06-25 negative control): for MCP backends agentgateway forwards the inbound
+# Authorization to the upstream by DEFAULT — with this whole policy DELETED the bearer still
+# arrived. So backend.auth.passthrough below is NOT what makes the bearer survive; it's kept
+# explicit only to document intent. backend.auth exists to INJECT/REPLACE upstream creds
+# (aws SigV4 / static key) — the LLM-gateway Bedrock path, not the user-bearer path.
+# No JWKS validation in stage A, so a synthetic token works.
+#
+# STAGE B (real RS256 Keycloak token): uncomment the `mcp` block to (1) validate the bearer against
+# Keycloak JWKS and (2) claim-gate the `echo` tool with a CEL matchExpression. A synthetic alg:none
+# token would be REJECTED at validation — stage B requires the real token (realm + creds from the user).
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: echo-mcp-policy
+  namespace: kagent
+spec:
+  targetRefs:
+    - group: agentgateway.dev
+      kind: AgentgatewayBackend
+      name: echo-mcp-backend
+  backend:
+    auth:
+      passthrough: {}            # forward the inbound user bearer upstream to echo-MCP
+    # --- STAGE B: real Keycloak token (fill issuer/realm/aud + required claim, then uncomment) ---
+    # mcp:
+    #   authentication:
+    #     mode: Strict
+    #     provider: Keycloak
+    #     issuer: "https://<keycloak-host>/realms/<realm>"
+    #     audiences: ["<aud>"]
+    #     jwks:
+    #       backendRef:
+    #         name: keycloak
+    #         namespace: keycloak
+    #         port: 8080
+    #       jwksPath: /realms/<realm>/protocol/openid-connect/certs
+    #   authorization:
+    #     action: Allow
+    #     policy:
+    #       matchExpressions:
+    #         # allow the echo tool only when the JWT carries the required role
+    #         - 'mcp.tool.name == "echo" && "<required-role>" in jwt.realm_access.roles'

@@ -1,5 +1,7 @@
-# Registers echo-MCP DIRECTLY (iteration 1 — no agentgateway in the path yet). Streamable-HTTP is
-# the kagent default transport. In iteration 2 this url repoints through the agentgateway waypoint.
+# ITERATION 2: the url now points THROUGH the agentgateway waypoint (the agw-dryrun proxy Service),
+# not at echo-MCP directly. So the path is kagent -> agentgateway proxy -> echo-MCP, and the proxy's
+# AgentgatewayPolicy (backend.auth.passthrough) decides whether the bearer survives the L7 hop.
+# Iteration-1 direct url kept below for reference.
 apiVersion: kagent.dev/v1alpha2
 kind: RemoteMCPServer
 metadata:
@@ -8,5 +10,6 @@ metadata:
 spec:
   description: "Echo MCP (dry-run) — returns the HTTP headers it received, to probe JWT propagation."
   protocol: STREAMABLE_HTTP
-  url: http://echo-mcp.kagent.svc.cluster.local:8080/mcp
+  url: http://agw-dryrun.kagent.svc.cluster.local:8080/mcp   # iter2: via agentgateway waypoint
+  # url: http://echo-mcp.kagent.svc.cluster.local:8080/mcp   # iter1: direct (no gateway)
   timeout: 30s

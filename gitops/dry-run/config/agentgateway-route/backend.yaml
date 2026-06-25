@@ -1,0 +1,19 @@
+# Declares echo-MCP as an MCP backend of the agentgateway proxy. agentgateway speaks the MCP
+# protocol to this target (multiplexing / tool-level authz happen here), so it must know the
+# upstream is StreamableHTTP at echo-mcp:8080/mcp. The AgentgatewayPolicy (policy.yaml) attaches
+# to THIS Backend (targetRefs) to add backend.auth.passthrough (+ stage-B mcp authn/authz).
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: echo-mcp-backend
+  namespace: kagent
+spec:
+  mcp:
+    targets:
+      - name: echo
+        static:
+          backendRef:
+            name: echo-mcp          # the echo-MCP Service (same namespace)
+          port: 8080
+          path: /mcp
+          protocol: StreamableHTTP

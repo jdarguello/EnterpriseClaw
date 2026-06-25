@@ -146,3 +146,57 @@ spec:
 ## MCPServer  (kmcp — runs an MCP server on-cluster)
 
 Provided by **kmcp** (bundled in the kagent chart; `kmcp.enabled`). Use this instead of `RemoteMCPServer` when EnterpriseClaw should *host* the MCP (e.g. the GitHub MCP for the demo's PR-open path). Reference it from an Agent with `kind: MCPServer`. Verify the exact `MCPServer` spec (image/transport/env/command) with `kubectl explain mcpserver.spec` after install — kmcp's API has churned (ToolServer→kmcp) and the spec is the least-stable of the set.
+
+---
+
+## agentgateway routing/auth CRDs (`agentgateway.dev/v1alpha1`)
+
+Verified against the **1.3.1** chart CRDs (`kubectl explain`, 2026-06-25). agentgateway is a kgateway-derived **Gateway-API control plane**: you create a standard `Gateway` (class `agentgateway`) which provisions a data-plane proxy, then route to MCP/AI/A2A backends declared as `AgentgatewayBackend`, and attach `AgentgatewayPolicy` for auth/authz. Fronting an MCP server (the iter2 dry-run set, all co-located to avoid cross-ns ReferenceGrants):
+
+```yaml
+# 1) Gateway → provisions a proxy Deployment+Service named after the Gateway (here: agw-dryrun).
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+spec: { gatewayClassName: agentgateway, listeners: [{ name: http, port: 8080, protocol: HTTP }] }
+---
+# 2) AgentgatewayBackend (kind mcp) → declares the upstream MCP. NOTE the installed-CRD shape is
+#    spec.mcp.targets[].static.{backendRef.name, port(REQUIRED), path, protocol} — NOT the newer
+#    docs' top-level spec.backendRefs (that's a later API). protocol enum: SSE | StreamableHTTP.
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+spec:
+  mcp:
+    targets:
+      - name: echo
+        static: { backendRef: { name: echo-mcp }, port: 8080, path: /mcp, protocol: StreamableHTTP }
+---
+# 3) HTTPRoute → /mcp to the AgentgatewayBackend (backendRef group is agentgateway.dev, not a Service).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+spec:
+  parentRefs: [{ group: gateway.networking.k8s.io, kind: Gateway, name: agw-dryrun }]
+  rules: [{ matches: [{ path: { type: PathPrefix, value: /mcp } }],
+            backendRefs: [{ group: agentgateway.dev, kind: AgentgatewayBackend, name: echo-mcp-backend }] }]
+```
+
+`AgentgatewayPolicy` is the auth/authz plane. Three relevant blocks (attach via `spec.targetRefs`; precedence Gateway < Listener < Route < Backend):
+- **`traffic.jwtAuthentication`** (attach to the HTTPRoute) — JWKS validation of the user JWT. `mode: Strict|Permissive|Optional`; `providers[].{issuer, audiences, jwks.{inline | remote.{backendRef, jwksPath}}}`; `mcp.provider: Keycloak|Auth0|Okta` for MCP OAuth resource-metadata. **inline JWKS** is available here (handy for self-signed tests).
+- **`backend.auth`** (attach to the Backend) — how the proxy authenticates *to* the upstream: `passthrough: {}` (forward incoming auth — but **for MCP backends this is the default**, see `jwt-propagation.md`), or `aws`(SigV4)/`azure`/`gcp`/`key`/`secretRef` to **inject/replace** creds (this is the LLM-gateway Bedrock IRSA path).
+- **`backend.mcp`** (attach to the Backend) — MCP-specific: `authentication` (JWKS, **remote-only** `backendRef`, with `provider: Keycloak`) + **`authorization.{action: Allow|Deny|Require, policy.matchExpressions[]}`** = tool-level CEL. CEL context includes `mcp.tool.name` and `jwt.*` claims; multiple `matchExpressions` are OR'd. Example: `'mcp.tool.name == "echo" && "platform-eng" in jwt.realm_access.roles'`.
+
+```yaml
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+spec:
+  targetRefs: [{ group: agentgateway.dev, kind: AgentgatewayBackend, name: echo-mcp-backend }]
+  backend:
+    auth: { passthrough: {} }              # explicit intent; MCP backends forward by default anyway
+    mcp:
+      authentication: { mode: Strict, provider: Keycloak, issuer: "https://…/realms/<realm>",
+                        audiences: ["<aud>"],
+                        jwks: { backendRef: { name: keycloak, namespace: keycloak, port: 80 },
+                                jwksPath: /realms/<realm>/protocol/openid-connect/certs } }
+      authorization: { action: Allow, policy: { matchExpressions: ['mcp.tool.name == "echo" && "<role>" in jwt.realm_access.roles'] } }
+```
+
+Status checks: `Gateway` → `Programmed=True`; `HTTPRoute` → `ResolvedRefs=True` (backend resolved); `AgentgatewayBackend` → `Accepted=True`; `AgentgatewayPolicy` → `Accepted=True` **and `Attached=True`** (attached to its target). Proxy access log lines carry `protocol=mcp mcp.method.name=… mcp.target=… gen_ai.tool.name=…` — the place to confirm an MCP call actually traversed the waypoint.
