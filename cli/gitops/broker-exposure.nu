@@ -11,15 +11,20 @@
 # as the `config-session-broker` Argo app. Resources carry explicit namespaces, so Argo honors them
 # over the app's default destination namespace.
 #
-# CROSS-REPO COUPLING (cannot be fixed from here): Keycloak's KC_HOSTNAME / frontend-url must be
-# pinned to https://auth.<domain> in the BROKER repo's keycloak values, or issued tokens' `iss`
-# claim will not match what agentgateway validates. Flagged for the Session-Broker repo.
+# SHARED ALB (done): the ingress generator below admits auth.<domain> + broker.<domain> on the
+# SAME internet-facing ALB as the rest of the platform, via the shared
+# `alb.ingress.kubernetes.io/group.name` (see `alb shared-group`). The existing argo-events / argocd
+# / argo-workflows Ingresses carry the same group.name (cli/kube-tools/service-mesh/patches.nu), so
+# the AWS Load Balancer Controller folds them all onto one ALB — host-based routing forwards each
+# host to the istio-ingress service, and the Istio Gateway/VS take it from there. No new ALB.
 #
-# OPEN (ALB host-admission): for the ALB to forward auth/broker hosts to istio-ingress it must admit
-# them (a shared-ALB Ingress via alb.ingress.kubernetes.io/group.name, or extra host rules on the
-# argo-events Ingress). That touches the proven webhook ALB path, so it is deliberately NOT done here
-# — these Istio routes are inert until that lands. See the report / follow-up.
+# KEYCLOAK HOSTNAME (tenant-specific, configured from the private repo): Keycloak's external issuer
+# (KC_HOSTNAME) and the broker's external OAuth URLs depend on $env.domain_name. The CLI supplies
+# those tenant values from the private repo; the broker manifests must consume them through a
+# parameter seam (the broker realm's redirectUris/webOrigins are a single Helm-rendered string and
+# cannot be sub-string patched from here). See the Session-Broker integration notes / report.
 source ../utils/generals.nu
+source ../infra/outputs.nu
 
 # ---------------------------------------------------------------------------
 # Pure generators — return the Istio manifest as a Nushell record.
@@ -69,9 +74,53 @@ def "broker-exposure virtual-service" [
     }
 }
 
+# AWS ALB Ingress that admits the broker/Keycloak hosts on the SHARED platform ALB and forwards
+# them to the istio-ingress gateway service. Mirrors the argo-events Ingress shape (TLS terminates
+# at the ALB; istio-ingress speaks HTTP behind it) and carries the shared `group.name` so it reuses
+# the one ALB instead of provisioning another. external-dns publishes both hostnames at that ALB.
+def "broker-exposure ingress" [
+    --auth-host:    string          # auth.<domain>   -> Keycloak (all paths)
+    --broker-host:  string          # broker.<domain> -> Session-Broker (callback only)
+    --subnets:      string          # comma-joined public subnet IDs for ALB placement
+    --group-name:   string          # shared ALB IngressGroup name
+    --callback-path = "/auth/callback"
+] {
+    {
+        apiVersion: "networking.k8s.io/v1"
+        kind: "Ingress"
+        metadata: {
+            name: "session-broker-istio-ingress"
+            namespace: "istio-ingress"
+            annotations: {
+                "alb.ingress.kubernetes.io/scheme": "internet-facing"
+                "alb.ingress.kubernetes.io/target-type": "ip"
+                "alb.ingress.kubernetes.io/backend-protocol": "HTTP"
+                "alb.ingress.kubernetes.io/listen-ports": '[{"HTTPS":443}, {"HTTP":80}]'
+                "alb.ingress.kubernetes.io/ssl-redirect": "443"
+                "alb.ingress.kubernetes.io/group.name": $group_name
+                "alb.ingress.kubernetes.io/subnets": $subnets
+                "external-dns.alpha.kubernetes.io/hostname": $"($auth_host),($broker_host)"
+            }
+        }
+        spec: {
+            ingressClassName: "alb"
+            rules: [
+                {
+                    host: $auth_host
+                    http: { paths: [ { path: "/", pathType: "Prefix", backend: { service: { name: "istio-ingress", port: { number: 80 } } } } ] }
+                }
+                {
+                    host: $broker_host
+                    http: { paths: [ { path: $callback_path, pathType: "Prefix", backend: { service: { name: "istio-ingress", port: { number: 80 } } } } ] }
+                }
+            ]
+        }
+    }
+}
+
 # kustomization for the config/session-broker/ directory.
 def "broker-exposure kustomization" [] {
-    { resources: [ "gateway.yaml" "virtual-service-keycloak.yaml" "virtual-service-broker.yaml" ] }
+    { resources: [ "ingress.yaml" "gateway.yaml" "virtual-service-keycloak.yaml" "virtual-service-broker.yaml" ] }
 }
 
 # ---------------------------------------------------------------------------
@@ -81,6 +130,8 @@ def "broker-exposure kustomization" [] {
 def "broker-exposure render" [
     --private-path  = "gitops-config"
     --domain:       string                                              # $env.domain_name, e.g. enterprise-claw.io
+    --subnets       = ""                                                # comma-joined public subnet IDs (ALB placement)
+    --group-name    = ""                                                # shared ALB IngressGroup; defaults to (alb shared-group)
     --auth-label    = "auth"                                            # auth.<domain>   -> Keycloak
     --broker-label  = "broker"                                         # broker.<domain> -> Session-Broker
     --keycloak-svc  = "keycloak.keycloak.svc.cluster.local"
@@ -90,8 +141,13 @@ def "broker-exposure render" [
 ] {
     let auth_host   = $"($auth_label).($domain)"
     let broker_host = $"($broker_label).($domain)"
+    let group = (if ($group_name | is-empty) { alb shared-group } else { $group_name })
     let dir = (abs-path --path=$"($private_path)/config/session-broker" --replace-argument="")
     mkdir $dir
+
+    (broker-exposure ingress --auth-host=$auth_host --broker-host=$broker_host
+        --subnets=$subnets --group-name=$group
+    ) | to yaml | save $"($dir)/ingress.yaml" --force
 
     (broker-exposure gateway --hosts=[$auth_host $broker_host]) | to yaml | save $"($dir)/gateway.yaml" --force
 

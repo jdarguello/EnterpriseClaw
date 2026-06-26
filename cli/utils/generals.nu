@@ -13,6 +13,17 @@ def "k8s node-labels subnet-environments" [
     return null
 }
 
+# Shared AWS ALB IngressGroup name. Every internet-facing Ingress that carries the
+# `alb.ingress.kubernetes.io/group.name: <this>` annotation is folded by the AWS Load
+# Balancer Controller onto ONE shared ALB (host-based routing differentiates them),
+# instead of provisioning a separate ALB per Ingress. This is how the broker/Keycloak
+# hosts "reuse" the existing internet-facing ALB rather than standing up a new one.
+# Cluster-scoped constant for the demo (single cluster); make it per-cluster-unique
+# (e.g. include the cluster name) before sharing one AWS account across clusters.
+def "alb shared-group" [] {
+    "enterpriseclaw"
+}
+
 #Returns relative path as global. For instance: 'tmp/example.txt' converts it to '/Users/nicholas/Documents/EnterpriseClaw/cli/tmp/example.txt'
 def "abs-path" [
     --path: string      #Relative path

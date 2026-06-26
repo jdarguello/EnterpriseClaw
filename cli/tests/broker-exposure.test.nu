@@ -36,13 +36,40 @@ def "broker-exposure-tests" [] {
             assert equal ($vs.spec.http.0.route.0.destination.host) "session-broker.session-broker.svc.cluster.local"
         }}
 
+        # ---- pure generator: shared-ALB Ingress admits both hosts on the istio-ingress service ----
+        { name: "ingress admits auth+broker hosts on the shared ALB group", run: {||
+            let ing = (broker-exposure ingress --auth-host="auth.example.io" --broker-host="broker.example.io"
+                --subnets="subnet-a,subnet-b" --group-name="enterpriseclaw")
+            assert equal $ing.kind "Ingress"
+            assert equal $ing.metadata.namespace "istio-ingress"
+            assert equal ($ing.metadata.annotations | get "alb.ingress.kubernetes.io/scheme") "internet-facing"
+            # the shared group.name is what folds this onto the existing platform ALB
+            assert equal ($ing.metadata.annotations | get "alb.ingress.kubernetes.io/group.name") "enterpriseclaw"
+            assert equal ($ing.metadata.annotations | get "alb.ingress.kubernetes.io/subnets") "subnet-a,subnet-b"
+            assert equal ($ing.metadata.annotations | get "external-dns.alpha.kubernetes.io/hostname") "auth.example.io,broker.example.io"
+            # auth host -> all paths; broker host -> callback only; both to the istio-ingress service
+            assert equal ($ing.spec.rules.0.host) "auth.example.io"
+            assert equal ($ing.spec.rules.0.http.paths.0.path) "/"
+            assert equal ($ing.spec.rules.0.http.paths.0.backend.service.name) "istio-ingress"
+            assert equal ($ing.spec.rules.1.host) "broker.example.io"
+            assert equal ($ing.spec.rules.1.http.paths.0.path) "/auth/callback"
+            assert equal ($ing.spec.rules.1.http.paths.0.backend.service.name) "istio-ingress"
+        }}
+
+        # ---- ingress group.name defaults to the shared platform group ----
+        { name: "render defaults the ingress to the shared ALB group", run: {||
+            let ing = (broker-exposure ingress --auth-host="auth.x" --broker-host="broker.x"
+                --subnets="s-1" --group-name=(alb shared-group))
+            assert equal ($ing.metadata.annotations | get "alb.ingress.kubernetes.io/group.name") "enterpriseclaw"
+        }}
+
         # ---- IO orchestrator: render derives hosts from the domain and writes the dir ----
         { name: "render writes resolved manifests under config/session-broker", run: {||
             let tmp = (make-tmpdir "broker-expose")
             mkdir $"($tmp)/gitops-config"
             let cwd = (pwd)
             cd $tmp
-            broker-exposure render --private-path=gitops-config --domain="enterprise-claw.io"
+            broker-exposure render --private-path=gitops-config --domain="enterprise-claw.io" --subnets="subnet-aaa,subnet-bbb"
 
             let dir = $"($tmp)/gitops-config/config/session-broker"
             let g = (open $"($dir)/gateway.yaml")
@@ -53,8 +80,15 @@ def "broker-exposure-tests" [] {
             let vb = (open $"($dir)/virtual-service-broker.yaml")
             assert equal ($vb.spec.hosts) [ "broker.enterprise-claw.io" ]
 
+            # the shared-ALB Ingress is rendered with the resolved hosts + injected subnets
+            let ing = (open $"($dir)/ingress.yaml")
+            assert equal ($ing.spec.rules.0.host) "auth.enterprise-claw.io"
+            assert equal ($ing.spec.rules.1.host) "broker.enterprise-claw.io"
+            assert equal ($ing.metadata.annotations | get "alb.ingress.kubernetes.io/subnets") "subnet-aaa,subnet-bbb"
+            assert equal ($ing.metadata.annotations | get "alb.ingress.kubernetes.io/group.name") "enterpriseclaw"
+
             let k = (open $"($dir)/kustomization.yaml")
-            assert equal $k.resources [ "gateway.yaml" "virtual-service-keycloak.yaml" "virtual-service-broker.yaml" ]
+            assert equal $k.resources [ "ingress.yaml" "gateway.yaml" "virtual-service-keycloak.yaml" "virtual-service-broker.yaml" ]
             cd $cwd
             rm -rf $tmp
         }}

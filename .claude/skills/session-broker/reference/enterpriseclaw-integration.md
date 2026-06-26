@@ -13,14 +13,17 @@ root `main.yaml` app-of-apps, or Argo won't see it.
 
 ```nu
 # cli/kube-tools/bootstrap.nu — step 4, before the push
-app-of-apps register-agents          # kagent trio + agentic CRs
-app-of-apps register-session-broker  # the broker bootstrap Application
-broker-exposure render --domain=($env.domain_name | str trim -c '"')
+let broker_subnets = (infra output --cloud-provider=$cloud_provider --output-name=public_subnet_ids | from json | str join ",")
+let broker_domain  = ($env.domain_name | str trim -c '"')
+app-of-apps register-agents               # kagent trio + agentic CRs
+app-of-apps register-session-broker       # the broker bootstrap Application
+broker-exposure render --domain=$broker_domain --subnets=$broker_subnets   # shared-ALB Ingress + Istio routes
+broker-keycloak-config render --domain=$broker_domain                      # tenant Keycloak/broker host ConfigMaps
 ```
 
 `main init`'s flow comment ([cli/enterpriseclaw](../../../../cli/enterpriseclaw) step 3) notes this.
 
-## The two modules
+## The three modules
 
 ### `cli/gitops/app-of-apps.nu` — app-of-apps wiring
 
@@ -52,10 +55,11 @@ auto-onboards** as `config-session-broker`.
 
 | File | Kind | Routes |
 |---|---|---|
+| `ingress.yaml` | AWS ALB `Ingress` `session-broker-istio-ingress` (ns `istio-ingress`) | admits `auth.<domain>` (`/`) + `broker.<domain>` (`/auth/callback`) → `istio-ingress` svc :80, on the **shared ALB** |
 | `gateway.yaml` | Istio `Gateway` `session-broker-gateway` (ns `istio-ingress`, selector `istio: ingress`, :80 HTTP) | hosts `auth.<domain>` + `broker.<domain>` |
 | `virtual-service-keycloak.yaml` | `VirtualService` (ns `keycloak`) | `auth.<domain>` `/` → `keycloak.keycloak.svc.cluster.local:80` |
 | `virtual-service-broker.yaml` | `VirtualService` (ns `session-broker`) | `broker.<domain>` **`/auth/callback`** → `session-broker.session-broker.svc.cluster.local:80` |
-| `kustomization.yaml` | — | lists the three |
+| `kustomization.yaml` | — | lists the four |
 
 - The broker VS is **scoped to `/auth/callback`** (minimal external surface — `/identity/resolve` and
   `/auth/login/start` are internal-only). Host subdomains are configurable (`--auth-label`, `--broker-label`).
@@ -63,16 +67,59 @@ auto-onboards** as `config-session-broker`.
   the same pattern the argo-events `config-security`/`config-istio` routing already uses.
 - Mirrors the proven argo-events exposure shape: TLS terminates at the ALB; `istio-ingress` speaks HTTP behind it.
 
-## STILL OPEN (not done — needs decisions)
+## Shared ALB (DONE — implemented 2026-06-26)
 
-1. **ALB host-admission ("reuse the ALB" literally).** The Istio routes above are **inert until the existing
-   internet-facing `istio-ingress` ALB is told to admit `auth.<domain>` + `broker.<domain>`** — i.e. a shared
-   ALB via `alb.ingress.kubernetes.io/group.name` on both a new Ingress *and* the existing argo-events Ingress,
-   or extra host rules on it. This **touches the proven GitHub-webhook ALB path** (brief ALB re-creation), so it
-   was deliberately left for an explicit decision. The current single internet-facing ALB is
-   `argo-events-istio-ingress` (scheme `internet-facing`, public subnets injected by the private-repo
-   `config/istio/argo-events/ingress-patch.yaml`).
-2. **`KC_HOSTNAME` pinning** — a broker-repo change (see SKILL.md gotcha 2). Cannot be done from here.
+"Reuse the existing internet-facing ALB" is implemented via a single AWS LB Controller **IngressGroup**:
+- A shared group name constant — [`alb shared-group`](../../../../cli/utils/generals.nu) = `enterpriseclaw`.
+- The per-tenant Istio Ingress patch
+  ([service-mesh/patches.nu](../../../../cli/kube-tools/service-mesh/patches.nu)) now stamps
+  `alb.ingress.kubernetes.io/group.name` on **every** kubetool Ingress (argocd / argo-workflows /
+  argo-events), folding the previously-separate per-tool ALBs onto one.
+- The broker/Keycloak Ingress (`broker-exposure ingress`) carries the **same** group name + the public
+  subnets (passed from `infra output public_subnet_ids` in the bootstrap step) + an external-dns
+  annotation for both hosts, so it rides that same ALB. Host-based routing forwards each host to the
+  `istio-ingress` service; the Istio Gateway/VS take it from there.
+- On a fresh `init` there is no ALB to disrupt (everything is created with the group from the start). On a
+  re-run against a live cluster the controller reconciles the existing per-tool ALBs into the shared one
+  (some churn) — acceptable for the ephemeral init/destroy flow.
+
+### `cli/gitops/broker-keycloak-config.nu` — tenant Keycloak/broker hostnames
+
+The tenant external host (`auth.<domain>` / `broker.<domain>`) is end-user config the broker repo cannot
+know. `broker-keycloak-config render` resolves it from `$env.domain_name` and writes **two `keycloak-hostnames`
+ConfigMaps** into the private repo's `config/session-broker-keycloak/` (its own kustomization → its own
+`config-session-broker-keycloak` Argo app, auto-onboarded by the `configs` ApplicationSet):
+
+| File | ConfigMap (ns) | Keys |
+|---|---|---|
+| `keycloak-hostnames-cm.yaml` | `keycloak-hostnames` (ns `keycloak`) | `KC_HOSTNAME_URL`, `KC_HOSTNAME_ADMIN_URL` = `https://auth.<domain>`; `BROKER_EXTERNAL_URL` = `https://broker.<domain>` |
+| `broker-hostnames-cm.yaml` | `keycloak-hostnames` (ns `session-broker`) | `KEYCLOAK_ISSUER_URL` = `https://auth.<domain>/realms/<realm>`; `KEYCLOAK_REDIRECT_URI` = `https://broker.<domain>/auth/callback` |
+
+- Pure generators (`keycloak-cm` / `broker-cm` / `kustomization`) are unit-tested; `render` is the IO.
+- **Labels/realm are configurable** (`--auth-label` / `--broker-label` / `--realm`, default `auth`/`broker`/`enterpriseclaw`)
+  and **MUST stay aligned with `broker-exposure`** — the issuer host is the host the ALB+Istio admit.
+- Host values are **non-secret**, so a ConfigMap (not the out-of-band `keycloak-realm-secrets` Secret) is the
+  vehicle; the broker reads them with `extraEnvVarsCM`.
+
+## STILL OPEN — the BROKER-SIDE change the user applies (chosen: "EC side only; you do broker")
+
+Why a broker change is unavoidable: the realm's `redirectUris`/`webOrigins` live **inside the monolithic
+`keycloakConfigCli.configuration` Helm string**, which the private repo cannot sub-string patch — without
+the right `redirect_uri`, Keycloak rejects the callback and login fails. EnterpriseClaw now supplies the
+tenant host (the ConfigMaps above); the **Session-Broker repo** must consume them (the full contract is the
+header of [broker-keycloak-config.nu](../../../../cli/gitops/broker-keycloak-config.nu)):
+
+1. `gitops/keycloak/values.yaml` — `extraEnvVarsCM: keycloak-hostnames` on the workload (+ run Keycloak in
+   proxy/edge so `KC_HOSTNAME_URL` drives the external issuer) and on `keycloakConfigCli`; change the
+   `session-broker` client `redirectUris` → `$(env:BROKER_EXTERNAL_URL)/auth/callback` and `webOrigins` →
+   `$(env:BROKER_EXTERNAL_URL)` (its `IMPORT_VARSUBSTITUTION_ENABLED: "true"` already enables `$(env:…)`).
+2. `gitops/session-broker` (the overlay `bootstrap.yaml` installs) — feed the Deployment from the CM
+   (`envFrom: [{configMapRef: {name: keycloak-hostnames}}]`) and **remove** the hardcoded
+   `KEYCLOAK_ISSUER_URL`/`KEYCLOAK_REDIRECT_URI` env (explicit env wins over envFrom); also point bootstrap
+   at a cloud overlay, not the localhost `dev` one.
+
+Minor: the two CMs target the `keycloak` / `session-broker` namespaces, which the broker's apps create; if a
+CM syncs before its namespace exists, Argo retries (eventually consistent) — fine for the ephemeral flow.
 
 ## Tests
 

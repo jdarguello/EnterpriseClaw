@@ -90,9 +90,12 @@ The Keycloak helm-app **left this repo in `796d38e`**. The agent calls the broke
    the broker ships its own `session-broker-callback` Ingress but with a **placeholder host**
    (`broker.session-broker.example.com`) and **no subnets**. EnterpriseClaw must provide the exposure →
    `reference/enterpriseclaw-integration.md`.
-2. **`KC_HOSTNAME` must be pinned to the external issuer** (`https://auth.<domain>`) in the **broker repo's**
-   keycloak values, or issued tokens' `iss` claim won't match what agentgateway validates. **Cannot be fixed
-   from EnterpriseClaw** — it's a broker-repo change.
+2. **`KC_HOSTNAME` / external issuer is split across repos (resolved 2026-06-26).** The tenant host
+   (`https://auth.<domain>`) is end-user config: **EnterpriseClaw supplies it** from the private repo as
+   `keycloak-hostnames` ConfigMaps (`cli/gitops/broker-keycloak-config.nu`). The **broker repo must consume
+   them** via a small `$(env:…)` seam — the realm's `redirectUris`/`webOrigins` are a sub-string of one
+   monolithic Helm string and **cannot** be patched remotely, so without the broker change Keycloak rejects
+   the callback and login fails. Full contract + the exact broker change: `reference/enterpriseclaw-integration.md`.
 3. **The broker is a confidential client.** Tokens are Keycloak-issued and broker-cached; do not design a path
    where the agent or workflow mints/holds Keycloak tokens itself — provenance must stay broker-guaranteed.
 4. **`aud` is a single broad audience for the POC** (validated by agentgateway at each hop). Per-agent token
@@ -104,5 +107,7 @@ The Keycloak helm-app **left this repo in `796d38e`**. The agent calls the broke
 ## How EnterpriseClaw installs + exposes it
 
 `enterpriseclaw init` registers the broker (and the agentic platform) into the tenant app-of-apps **before the
-push**, declaratively, so `destroy` prunes it. The CLI mechanics, exposure manifests, the still-open ALB item,
-and the unit tests are in **`reference/enterpriseclaw-integration.md`**.
+push**, declaratively, so `destroy` prunes it. It also exposes the broker+Keycloak on the **shared platform ALB**
+(one IngressGroup, host-based routing) and writes the **tenant hostname ConfigMaps** the broker consumes. The CLI
+mechanics, exposure manifests, the hostname contract + the remaining broker-side change, and the unit tests are in
+**`reference/enterpriseclaw-integration.md`**.

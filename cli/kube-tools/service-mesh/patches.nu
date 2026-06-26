@@ -77,6 +77,10 @@ def --env "istio components patch ingress" [
             annotations: {
                 "alb.ingress.kubernetes.io/subnets": $infra_outputs.ingress_annotation_subnets
                 "external-dns.alpha.kubernetes.io/hostname": $hostname
+                # Shared ALB: collapse this Ingress onto the one platform ALB (host-based
+                # routing) instead of a per-tool ALB. The broker/Keycloak Ingress carries the
+                # same group.name, so they ride the same load balancer. See `alb shared-group`.
+                "alb.ingress.kubernetes.io/group.name": (alb shared-group)
             }
             name: $ingress_name
             namespace: "istio-ingress"

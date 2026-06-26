@@ -7,11 +7,15 @@
 
 source app-of-apps.test.nu
 source broker-exposure.test.nu
+source broker-keycloak-config.test.nu
+source service-mesh.test.nu
 
 def main [] {
     let suites = [
         { name: "app-of-apps", tests: (app-of-apps-tests) }
         { name: "broker-exposure", tests: (broker-exposure-tests) }
+        { name: "broker-keycloak-config", tests: (broker-keycloak-config-tests) }
+        { name: "service-mesh", tests: (service-mesh-tests) }
     ]
 
     mut total = 0

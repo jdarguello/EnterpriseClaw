@@ -29,8 +29,15 @@ Exits non-zero if any test fails.
   Application generators, the idempotent kustomization merge, and the `register-*` IO orchestrators
   (write the definitions into a seeded private-repo clone, register them, stay idempotent on re-run).
 - `broker-exposure.test.nu` — the Istio `Gateway` / `VirtualService` generators for the
-  `auth.<domain>` (Keycloak) and `broker.<domain>` (callback) host-routes, and the `render` IO that
-  resolves them from `$env.domain_name`.
+  `auth.<domain>` (Keycloak) and `broker.<domain>` (callback) host-routes, the shared-ALB `Ingress`
+  generator (group.name + subnets + external-dns hosts), and the `render` IO that resolves them all
+  from `$env.domain_name`.
+- `broker-keycloak-config.test.nu` — the tenant `keycloak-hostnames` ConfigMap generators (the
+  `keycloak` and `session-broker` namespace variants) and the `render` IO that resolves the external
+  issuer / redirect URLs from `$env.domain_name` (+ a custom realm / subdomain labels).
+- `service-mesh.test.nu` — the per-tenant Istio Ingress patch carries the shared
+  `alb.ingress.kubernetes.io/group.name`, so the kubetool Ingresses and the broker/Keycloak Ingress
+  fold onto one ALB (events keeps its `/payload` backend path).
 
 ## Adding a suite
 
