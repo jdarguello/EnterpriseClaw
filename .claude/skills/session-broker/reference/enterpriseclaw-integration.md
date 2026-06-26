@@ -107,7 +107,12 @@ Why a broker change is unavoidable: the realm's `redirectUris`/`webOrigins` live
 `keycloakConfigCli.configuration` Helm string**, which the private repo cannot sub-string patch — without
 the right `redirect_uri`, Keycloak rejects the callback and login fails. EnterpriseClaw now supplies the
 tenant host (the ConfigMaps above); the **Session-Broker repo** must consume them (the full contract is the
-header of [broker-keycloak-config.nu](../../../../cli/gitops/broker-keycloak-config.nu)):
+header of [broker-keycloak-config.nu](../../../../cli/gitops/broker-keycloak-config.nu)).
+
+> **Ready-to-paste handoff:** [`broker-side-change.prompt.md`](broker-side-change.prompt.md) is a
+> self-contained prompt to run inside the Session-Broker repo that implements exactly the change below.
+
+Summary of that change:
 
 1. `gitops/keycloak/values.yaml` — `extraEnvVarsCM: keycloak-hostnames` on the workload (+ run Keycloak in
    proxy/edge so `KC_HOSTNAME_URL` drives the external issuer) and on `keycloakConfigCli`; change the
