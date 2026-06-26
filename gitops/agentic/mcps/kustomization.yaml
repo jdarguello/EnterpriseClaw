@@ -1,15 +1,21 @@
 # The kmcp-managed MCP servers the agents call as tools. Each is GitHub's github-mcp-server,
-# TOOLSET-SCOPED so the two privilege tiers are split at the MCP/route level (no per-tool CEL):
-#   - github-issues       (toolset: issues)            -> gated on capability issue:create
-#   - infra-provisioning  (toolset: repos,pull_requests) -> gated on capability db:provision:dev
-# The gating itself lives in ../mcp-gateway/ (agentgateway routes + AgentgatewayPolicy). The
-# `agentic` ApplicationSet syncs this directory as the `agentic-mcps` Application.
+# TOOLSET-SCOPED so the privilege tiers are split at the MCP/route level (no per-tool CEL):
+#   - github-issues       (toolset: issues)              -> AUTH: gated on capability issue:create
+#   - infra-provisioning  (toolset: repos,pull_requests) -> AUTH: gated on capability db:provision:dev
+#   - github-readonly     (toolset: issues,pull_requests, --read-only) -> UNAUTH: no JWT; physically
+#                          read-only; reached directly by the github-reader agent (no gateway route)
+# The auth gating lives in ../mcp-gateway/ (agentgateway routes + AgentgatewayPolicy); github-readonly
+# has NO route there by design (no user JWT to validate — the read-only tool surface is the boundary).
+# The `agentic` ApplicationSet syncs this directory as the `agentic-mcps` Application.
 #
-# PREREQ (NOT committed): Secret `github-creds` in ns kagent with key GITHUB_PERSONAL_ACCESS_TOKEN
-# (reuse the create-github-app-token mint). Both pods envFrom it; without it they stay NotReady.
+# PREREQ (NOT committed), both in ns kagent, key GITHUB_PERSONAL_ACCESS_TOKEN:
+#   - `github-creds`          (read/write) — github-issues + infra-provisioning envFrom it
+#   - `github-readonly-creds` (READ-scoped) — github-readonly envFrom it; defines the anonymous blast
+#     radius, so scope it to public/specific repos only. Without these the respective pods stay NotReady.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: kagent          # kagent controller WATCH_NAMESPACES=kagent — CRs MUST live here
 resources:
   - github-issues.yaml
   - infra-provisioning.yaml
+  - github-readonly.yaml

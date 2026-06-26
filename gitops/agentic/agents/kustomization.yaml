@@ -6,3 +6,4 @@ namespace: kagent          # kagent controller WATCH_NAMESPACES=kagent — CRs M
 resources:
   - general-classifier
   - platform-agent
+  - github-reader

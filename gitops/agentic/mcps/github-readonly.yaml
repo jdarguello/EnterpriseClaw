@@ -1,0 +1,46 @@
+# github-readonly — the UNAUTHENTICATED read-only GitHub MCP (kmcp-managed).
+#
+# Role: the single tool available on the JWT-less door (CLAUDE.md §2.2). It backs the `github-reader`
+# agent that anonymous users reach without signing in. It exists so the unauthenticated experience can
+# answer real questions from GitHub (issue/PR status) WITHOUT ever being able to mutate anything.
+#
+# THE HARD BOUNDARY IS HERE, NOT IN THE AGENT. github-mcp-server is launched with `--read-only`, so it
+# registers ONLY read tools — there is physically no write tool to call. A prompt-injected reader agent
+# therefore cannot create/edit/merge anything: the capability simply does not exist on the wire. This is
+# the project thesis applied to the anonymous path — "the model is not the security boundary, the mesh
+# (here, the tool surface) is." Toolset-scoped to `issues,pull_requests` to bound the read surface too.
+#
+# NO agentgateway route in front (unlike github-issues/infra-provisioning): this path carries no user
+# JWT, so there is nothing to validate at L7. The reader agent references THIS MCPServer directly
+# (kind: MCPServer); ztunnel still provides the L4 mTLS/SPIFFE workload rail, and the reader's SPIFFE is
+# allow-listed only here — so it cannot reach the Strict-gated write MCPs (tokenless → 401 there).
+#
+# GitHub auth = a DEDICATED READ-SCOPED token in Secret `github-readonly-creds` (NOT the read/write
+# `github-creds`). That token defines the anonymous blast radius: the MCP can read exactly what the
+# token can see, so scope it to public/specific repos. Defense in depth: read-only FLAG + read-only
+# TOKEN. PREREQ: `github-readonly-creds` (ns kagent, key GITHUB_PERSONAL_ACCESS_TOKEN) — not committed;
+# until it exists this pod stays NotReady (envFrom of a missing Secret).
+apiVersion: kagent.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: github-readonly
+  namespace: kagent
+spec:
+  transportType: stdio
+  stdioTransport: {}
+  deployment:
+    image: ghcr.io/github/github-mcp-server
+    cmd: ./github-mcp-server
+    args: ["stdio", "--read-only"]   # registers ONLY read tools — the physical write boundary
+    port: 3000
+    env:
+      GITHUB_TOOLSETS: "issues,pull_requests"
+    secretRefs:
+      - name: github-readonly-creds   # -> envFrom; dedicated READ-scoped GITHUB_PERSONAL_ACCESS_TOKEN
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "250m"
+        memory: "256Mi"
