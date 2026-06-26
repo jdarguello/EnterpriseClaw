@@ -45,4 +45,10 @@ live 2026-06-26).
 ## Prereqs (not committed)
 
 - `github-creds` (ns `kagent`) — the MCP upstreams' GitHub token (see [../mcps/](../mcps/)).
-- `mcp-discovery-token` (ns `kagent`) — baseline bearer for Strict tool discovery.
+- `mcp-discovery-token` (ns `kagent`, key `authorization` = `"Bearer <jwt>"`) — the bearer the kagent
+  controller uses for tokenless tool **discovery**, which must survive `Strict` on both routes. Source it
+  from a **`kagent-controller` service-account** in the realm (`client_credentials`, with **both**
+  audiences `issue-tracker`+`infra-provisioner` and **both** capability roles `issue:create`+`db:provision:dev`,
+  so one token passes both `/issues` and `/provisioning`). It's a *workload* credential (the controller's),
+  not a user's. `headersFrom` resolves it at **compile time** — if absent, the `RemoteMCPServer`/`Agent` go
+  `ACCEPTED=False`. Provenance + the verified result are in the kagent-trio skill's `jwt-propagation.md`.
