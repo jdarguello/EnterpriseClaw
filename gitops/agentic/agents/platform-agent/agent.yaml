@@ -63,7 +63,9 @@ spec:
           kind: RemoteMCPServer
           apiGroup: kagent.dev
           name: github-issues
-          toolNames: ["create_issue", "get_issue", "list_issues"]
+          # Tool names are the github-mcp-server's CURRENT (toolset-scoped) names, verified live via
+          # RemoteMCPServer discovery 2026-06-26: the server renamed create/get → issue_write/issue_read.
+          toolNames: ["issue_write", "issue_read", "list_issues", "search_issues"]
           allowedHeaders: ["Authorization"]      # forward the user bearer to the MCP (JWT propagation)
       - type: McpServer
         mcpServer:
