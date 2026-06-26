@@ -1,0 +1,37 @@
+# infra-provisioning — the PRIVILEGED-tier GitHub MCP (kmcp-managed).
+#
+# Same github-mcp-server runtime as github-issues, but TOOLSET-SCOPED to `repos,pull_requests` —
+# the tools needed to open the Crossplane-Claim PR (create_branch / create_or_update_file /
+# create_pull_request). Per §2.2 the agent does NOT provision directly: it proposes a PR; a human
+# merges; Argo CD + Crossplane reconcile. So "provision a dev DB" == "open an infra PR" here.
+#
+# The agentgateway route in front requires the Keycloak capability `db:provision:dev` (client
+# `infra-provisioner`) — held ONLY by /engineering/seniors (realm role senior-engineer). A baseline
+# user (alice: agent-user, has only infra:read) is rejected at the gateway with 403 and never
+# reaches this pod. See mcp-gateway/policies.yaml.
+#
+# Service `infra-provisioning:3000` serving `/mcp`. Same `github-creds` PREREQ as github-issues.
+apiVersion: kagent.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: infra-provisioning
+  namespace: kagent
+spec:
+  transportType: stdio
+  stdioTransport: {}
+  deployment:
+    image: ghcr.io/github/github-mcp-server
+    cmd: ./github-mcp-server
+    args: ["stdio"]
+    port: 3000
+    env:
+      GITHUB_TOOLSETS: "repos,pull_requests"
+    secretRefs:
+      - name: github-creds        # -> envFrom; must carry GITHUB_PERSONAL_ACCESS_TOKEN
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "250m"
+        memory: "256Mi"

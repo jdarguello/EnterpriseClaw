@@ -1,0 +1,20 @@
+# The agentgateway MCP waypoint — the ENFORCEMENT plane for the agent's tools. Synced as the
+# `agentic-mcp-gateway` Application by the `agentic` ApplicationSet.
+#
+#   gateway.yaml          the agentgateway proxy (Gateway class agentgateway)
+#   backends.yaml         each kmcp MCP Service as an AgentgatewayBackend (kind mcp)
+#   httproutes.yaml       /issues + /provisioning on the shared listener
+#   policies.yaml         *** the authz catalog: Strict Keycloak-JWT validation + capability CEL ***
+#   remotemcpservers.yaml the agent's handles, pointed THROUGH the proxy (so the JWT hop happens)
+#
+# Prereqs (NOT committed): Secret `mcp-discovery-token` (Strict tool discovery) — see
+# remotemcpservers.yaml; and the MCP upstreams in ../mcps/ (which need `github-creds`).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kagent
+resources:
+  - gateway.yaml
+  - backends.yaml
+  - httproutes.yaml
+  - policies.yaml
+  - remotemcpservers.yaml

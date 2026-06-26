@@ -1,0 +1,94 @@
+# ============================================================================================
+# THE AUTHORIZATION CATALOG — "which Keycloak capability reaches which MCP", enforced by the mesh.
+# ============================================================================================
+# This is the framework-level catalog (target -> required claim) from CLAUDE.md §2.2. The role->user
+# assignment lives tenant-side in Keycloak (the Session-Broker `enterpriseclaw` realm); here we only
+# state the REQUIREMENT each MCP route imposes on the validated user JWT.
+#
+# Mechanism = the proven dry-run iter-2 stage-B shape (PASSED 2026-06-25): validation AND authz both
+# under `traffic` (route-level), attached to the HTTPRoute, with jwtAuthentication.mode: Strict.
+#   - Strict is REQUIRED — only Strict populates jwt.* into the authz CEL context (and 401s
+#     tokenless/forged). Permissive lets tokenless through but leaves jwt.* empty, so authz denies
+#     even a valid token.
+#   - The validated user JWT is CONSUMED at the gateway (no backend.auth.passthrough) — correct for
+#     the POC: the user JWT governs WHETHER the human may reach the MCP; it does NOT continue to
+#     GitHub (GitHub-side auth = the MCP's own github-creds bot/App token). Two separate rails.
+#   - issuer/JWKS verified live 2026-06-26: the in-cluster Keycloak stamps
+#     iss=http://keycloak.keycloak.svc/realms/enterpriseclaw (the external https://...example.com in
+#     the Session-Broker values.yaml is the PROD hostname; locally it is the svc form). iss must match
+#     byte-for-byte or validation fails InvalidIssuer.
+#
+# Demo outcome (realm: alice=/engineering [agent-user], juan=/engineering/seniors [+senior-engineer]):
+#   github-issues       -> alice ✅  juan ✅   (both hold issue:create)
+#   infra-provisioning  -> alice ❌ 403,  juan ✅   (only juan holds db:provision:dev)
+#   (db:provision:prod is held by NOBODY — an optional 3rd route would 403 even juan.)
+#
+# NOTE (runtime re-verify item): the nested client-role CEL `jwt.resource_access["<client>"].roles`
+# (bracket key access) is one notch deeper than the proven realm-role path `jwt.realm_access.roles`.
+# Validated shape against 1.3.1 CEL on first sync; falls back to gating on the composite realm role
+# (`"senior-engineer" in jwt.realm_access.roles`) if bracket-key access misbehaves.
+# --------------------------------------------------------------------------------------------
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: github-issues-jwt
+  namespace: kagent
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: github-issues-route
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      providers:
+        - issuer: "http://keycloak.keycloak.svc/realms/enterpriseclaw"
+          audiences: ["issue-tracker"]      # the bearer-only resource client = this MCP's audience
+          jwks:
+            remote:
+              backendRef:
+                group: ""
+                kind: Service
+                name: keycloak
+                namespace: keycloak
+                port: 80
+              jwksPath: /realms/enterpriseclaw/protocol/openid-connect/certs
+    authorization:
+      action: Allow                          # allow requests matching the expression; deny all others
+      policy:
+        matchExpressions:
+          # baseline capability: must hold issue:create on the issue-tracker client
+          - 'has(jwt.resource_access) && "issue-tracker" in jwt.resource_access && "issue:create" in jwt.resource_access["issue-tracker"].roles'
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: infra-provisioning-jwt
+  namespace: kagent
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: infra-provisioning-route
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      providers:
+        - issuer: "http://keycloak.keycloak.svc/realms/enterpriseclaw"
+          audiences: ["infra-provisioner"]  # the bearer-only resource client = this MCP's audience
+          jwks:
+            remote:
+              backendRef:
+                group: ""
+                kind: Service
+                name: keycloak
+                namespace: keycloak
+                port: 80
+              jwksPath: /realms/enterpriseclaw/protocol/openid-connect/certs
+    authorization:
+      action: Allow
+      policy:
+        matchExpressions:
+          # privileged capability: must hold db:provision:dev on the infra-provisioner client
+          # (only /engineering/seniors -> senior-engineer composite grants it; alice is denied here)
+          - 'has(jwt.resource_access) && "infra-provisioner" in jwt.resource_access && "db:provision:dev" in jwt.resource_access["infra-provisioner"].roles'

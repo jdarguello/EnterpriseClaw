@@ -5,3 +5,4 @@ kind: Kustomization
 namespace: kagent          # kagent controller WATCH_NAMESPACES=kagent — CRs MUST live here
 resources:
   - general-classifier
+  - platform-agent

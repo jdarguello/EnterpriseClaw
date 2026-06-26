@@ -1,0 +1,35 @@
+# AgentgatewayBackends — declare each kmcp MCP Service as an MCP backend of the proxy. agentgateway
+# speaks the MCP protocol to these targets (multiplexing happens here). Shape verified on 1.3.1:
+# spec.mcp.targets[].static.{backendRef.name, port(REQUIRED), path, protocol} — protocol enum
+# SSE | StreamableHTTP. The kmcp Services serve MCP at :3000/mcp (probe-verified 2026-06-26).
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: github-issues-backend
+  namespace: kagent
+spec:
+  mcp:
+    targets:
+      - name: github-issues
+        static:
+          backendRef:
+            name: github-issues       # the kmcp MCPServer Service (same namespace)
+          port: 3000
+          path: /mcp
+          protocol: StreamableHTTP
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: infra-provisioning-backend
+  namespace: kagent
+spec:
+  mcp:
+    targets:
+      - name: infra-provisioning
+        static:
+          backendRef:
+            name: infra-provisioning  # the kmcp MCPServer Service (same namespace)
+          port: 3000
+          path: /mcp
+          protocol: StreamableHTTP

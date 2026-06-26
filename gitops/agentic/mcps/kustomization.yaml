@@ -1,8 +1,15 @@
-# Holds the kmcp-managed MCPServer / RemoteMCPServer definitions the agents call as tools.
-# Empty for now: the general-classifier is the JWT-less triage door and uses NO tools by design.
-# The first MCP to land here will be the GitHub MCP (the demo's PR-open path) — add its manifest
-# and list it under `resources:` and the `agentic` ApplicationSet will onboard it automatically.
+# The kmcp-managed MCP servers the agents call as tools. Each is GitHub's github-mcp-server,
+# TOOLSET-SCOPED so the two privilege tiers are split at the MCP/route level (no per-tool CEL):
+#   - github-issues       (toolset: issues)            -> gated on capability issue:create
+#   - infra-provisioning  (toolset: repos,pull_requests) -> gated on capability db:provision:dev
+# The gating itself lives in ../mcp-gateway/ (agentgateway routes + AgentgatewayPolicy). The
+# `agentic` ApplicationSet syncs this directory as the `agentic-mcps` Application.
+#
+# PREREQ (NOT committed): Secret `github-creds` in ns kagent with key GITHUB_PERSONAL_ACCESS_TOKEN
+# (reuse the create-github-app-token mint). Both pods envFrom it; without it they stay NotReady.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: kagent
-resources: []
+namespace: kagent          # kagent controller WATCH_NAMESPACES=kagent — CRs MUST live here
+resources:
+  - github-issues.yaml
+  - infra-provisioning.yaml

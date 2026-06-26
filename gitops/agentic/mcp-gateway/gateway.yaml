@@ -1,0 +1,27 @@
+# The agentgateway MCP waypoint — the L7 enforcement point BETWEEN the agent and the GitHub MCPs.
+#
+# A Gateway with gatewayClassName `agentgateway` makes the agentgateway controller provision a
+# data-plane proxy (Deployment + Service `agentic-mcp-gw`) in this namespace. The agent's
+# RemoteMCPServers point at this proxy (not at the MCP Services directly), so every MCP tool call
+# traverses the waypoint — where the Keycloak JWT is validated and claim-gated (policies.yaml).
+# This is the proven iter-2 pattern (dry-run stage B PASSED 2026-06-25), now carrying two role-gated
+# routes instead of one.
+#
+# Two routes share one listener, distinguished by path: /issues and /provisioning (httproutes.yaml).
+# Mesh-less here (mirrors the dry-run, which isolated the L7/JWT variable); production meshes this
+# proxy as the Istio ambient waypoint (istio.autoEnabled). If autoEnabled blocks readiness, opt out
+# with an AgentgatewayParameters (spec.istio.enabled: false).
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: agentic-mcp-gw
+  namespace: kagent
+spec:
+  gatewayClassName: agentgateway
+  listeners:
+    - name: http
+      port: 8080
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same

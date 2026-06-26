@@ -1,0 +1,75 @@
+# platform-agent — the AUTHENTICATED action agent (the second real EnterpriseClaw agent).
+#
+# Role in §2.2: after the general-classifier labels a request `action` and a user JWT is present, the
+# Workflow routes here. ONE agent fronts BOTH gated MCPs; the mesh — not the agent — decides which
+# the caller may actually reach. That is the demo's thesis made concrete: alice and juan hit the
+# SAME agent, but agentgateway lets alice open an issue and 403s her provisioning attempt, while juan
+# can do both. The model never makes the authorization decision.
+#
+# JWT propagation (the hard requirement, dry-run-proven): `allowedHeaders: ["Authorization"]` on each
+# tool ref forwards the inbound A2A user bearer to the MCP tool call intact (kagent fallback step 1,
+# PASSED 2026-06-25). The bearer rides to the agentgateway waypoint, which validates + claim-gates it
+# (mcp-gateway/policies.yaml) and then consumes it — it does NOT reach GitHub (GitHub-side auth is the
+# MCP's own github-creds token).
+#
+# Model: reuses the Bedrock-verified `bedrock-claude-haiku` ModelConfig (Claude Haiku 4.5 via
+# agentgateway as the LLM gateway) — the same one the classifier uses. Sufficient for POC tool-use;
+# can be upgraded to Sonnet/Opus later without touching this agent.
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: platform-agent
+  namespace: kagent
+spec:
+  type: Declarative
+  description: >-
+    Authenticated platform action agent. Opens GitHub issues (baseline) and infra-provisioning PRs
+    (senior) via two JWT-gated MCPs; agentgateway claim-gates which the caller may reach.
+  declarative:
+    modelConfig: bedrock-claude-haiku
+    systemMessage: |
+      You are the EnterpriseClaw platform agent. You help authenticated platform engineers act on
+      their infrastructure through GitHub, by calling MCP tools. You operate inside a governed
+      pipeline: you PROPOSE changes (open issues / open pull requests); humans review and merge, and
+      Argo CD + Crossplane reconcile them. You never claim to have provisioned anything directly.
+
+      Tools available to you:
+      - The "github-issues" MCP — create and read GitHub issues. Use this when the user wants to file
+        an issue (e.g. capturing a task or request during a planning session).
+      - The "infra-provisioning" MCP — open a pull request that carries a Crossplane Claim to
+        provision a managed dependency (e.g. a dev database). Use this when the user asks to provision
+        infrastructure. The change is delivered as a PR for a human to merge, never applied directly.
+
+      Authorization is NOT your responsibility and NOT something you can reason your way around: the
+      mesh enforces it. If you attempt a tool the caller is not entitled to, the call is rejected
+      (HTTP 403) before it reaches the tool. When that happens, do NOT retry, do NOT look for another
+      way — report plainly that the user is not authorized for that action and, if relevant, that a
+      more privileged role is required. Never fabricate a success.
+
+      Be concise. Confirm what you did (or proposed) and link the issue/PR when the tool returns one.
+    a2aConfig:
+      skills:
+        - id: open-github-issue
+          name: Open a GitHub issue
+          description: File a GitHub issue on the user's behalf (baseline capability).
+          tags: ["github", "issues", "action"]
+        - id: provision-dev-dependency
+          name: Provision a dev dependency
+          description: Open a PR carrying a Crossplane Claim to provision a dev managed dependency (senior capability).
+          tags: ["github", "pull-request", "crossplane", "provisioning", "action"]
+    tools:
+      - type: McpServer
+        mcpServer:
+          kind: RemoteMCPServer
+          apiGroup: kagent.dev
+          name: github-issues
+          toolNames: ["create_issue", "get_issue", "list_issues"]
+          allowedHeaders: ["Authorization"]      # forward the user bearer to the MCP (JWT propagation)
+      - type: McpServer
+        mcpServer:
+          kind: RemoteMCPServer
+          apiGroup: kagent.dev
+          name: infra-provisioning
+          toolNames: ["create_branch", "create_or_update_file", "create_pull_request", "get_file_contents"]
+          requireApproval: ["create_pull_request"]   # mutating change-delivery behind a human prompt (§2.2)
+          allowedHeaders: ["Authorization"]

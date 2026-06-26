@@ -1,0 +1,43 @@
+# HTTPRoutes — one per MCP, distinguished by path on the shared agentic-mcp-gw listener. The
+# backendRef points at an agentgateway.dev/AgentgatewayBackend (not a Service), so agentgateway
+# applies its MCP handling + the attached AgentgatewayPolicy. The AgentgatewayPolicy attaches to
+# THESE routes (policies.yaml targetRefs) — that is where JWT validation + claim-gating live.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: github-issues-route
+  namespace: kagent
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: agentic-mcp-gw
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /issues
+      backendRefs:
+        - group: agentgateway.dev
+          kind: AgentgatewayBackend
+          name: github-issues-backend
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: infra-provisioning-route
+  namespace: kagent
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: agentic-mcp-gw
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /provisioning
+      backendRefs:
+        - group: agentgateway.dev
+          kind: AgentgatewayBackend
+          name: infra-provisioning-backend

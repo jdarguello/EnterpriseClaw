@@ -1,0 +1,53 @@
+# The agent's handle on each gated MCP. CRUCIAL: the url points at the agentgateway PROXY
+# (agentic-mcp-gw), NOT at the MCP Service directly — that is what forces every tool call through
+# the L7 waypoint where the Keycloak JWT is validated + claim-gated. (Pointing kagent straight at
+# the github-issues/infra-provisioning Services would bypass all authz — the model must not be able
+# to reach a tool its caller's identity isn't allow-listed for.)
+#
+# Plaintext http -> NO `tls` block (CEL rejects tls on http:// urls).
+#
+# --- OPEN INTEGRATION ITEM (Strict tool discovery) -------------------------------------------
+# Under jwtAuthentication.mode: Strict the gateway 401s ANY tokenless request — including the kagent
+# controller's tokenless tool DISCOVERY (tools/list) at reconcile. So discovery needs a baseline
+# bearer: `headersFrom` injects a static Authorization from Secret `mcp-discovery-token`. The user's
+# per-call bearer (Agent…allowedHeaders: ["Authorization"]) overrides it for tools/call.
+# Constraints on that discovery token: it must satisfy BOTH routes (hold issue:create AND
+# db:provision:dev, aud issue-tracker + infra-provisioner) and Keycloak access tokens are short-lived
+# — so the durable fix is a dedicated long-TTL service-account token, NOT a hand-pasted one. PREREQ:
+# Secret `mcp-discovery-token` (key `authorization` = "Bearer <jwt>"), ns kagent, NOT committed.
+# Until it exists, enforcement is still provable by driving the gateway routes DIRECTLY with alice/
+# juan tokens (the dry-run method); only the through-kagent agent path depends on this token.
+# --------------------------------------------------------------------------------------------
+apiVersion: kagent.dev/v1alpha2
+kind: RemoteMCPServer
+metadata:
+  name: github-issues
+  namespace: kagent
+spec:
+  description: "GitHub issues MCP (baseline tier), reached through the agentgateway waypoint (JWT-gated)."
+  url: http://agentic-mcp-gw.kagent.svc.cluster.local:8080/issues
+  protocol: STREAMABLE_HTTP
+  timeout: 30s
+  headersFrom:
+    - name: Authorization
+      valueFrom:
+        type: Secret
+        name: mcp-discovery-token
+        key: authorization
+---
+apiVersion: kagent.dev/v1alpha2
+kind: RemoteMCPServer
+metadata:
+  name: infra-provisioning
+  namespace: kagent
+spec:
+  description: "GitHub infra-provisioning MCP (senior tier), reached through the agentgateway waypoint (JWT-gated)."
+  url: http://agentic-mcp-gw.kagent.svc.cluster.local:8080/provisioning
+  protocol: STREAMABLE_HTTP
+  timeout: 30s
+  headersFrom:
+    - name: Authorization
+      valueFrom:
+        type: Secret
+        name: mcp-discovery-token
+        key: authorization

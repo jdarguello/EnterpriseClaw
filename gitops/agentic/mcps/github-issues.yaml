@@ -1,0 +1,41 @@
+# github-issues — the BASELINE-tier GitHub MCP (kmcp-managed).
+#
+# Runs GitHub's official github-mcp-server (stdio) on-cluster; kmcp wraps it with a sidecar HTTP
+# gateway and exposes it as Service `github-issues:3000` serving MCP at `/mcp` (StreamableHTTP,
+# appProtocol kgateway.dev/mcp) — verified by a throwaway probe 2026-06-26.
+#
+# TOOLSET-SCOPED to `issues` only (GITHUB_TOOLSETS). This is what keeps the two-tier split at the
+# ROUTE level (no per-tool CEL): this MCP only ever contains issue tools, so reaching it == being
+# allowed the issue capability. The agentgateway route in front (mcp-gateway/) requires the Keycloak
+# capability `issue:create` (client `issue-tracker`) — see mcp-gateway/policies.yaml.
+#
+# GitHub auth = a token from Secret `github-creds` (key GITHUB_PERSONAL_ACCESS_TOKEN), injected as
+# env via kmcp's secretRefs->envFrom. PER §2.2 the *user JWT stops at the gateway*; GitHub-side
+# identity is this bot/App token, and human attribution lives in the Workflow archive + agentgateway
+# trace. PREREQ: `github-creds` must exist in ns kagent (NOT committed — see mcps/README.md); until
+# it does, this pod stays NotReady (envFrom of a missing Secret) — the authz gating in front is
+# still fully testable because the gateway rejects/allows BEFORE contacting this upstream.
+apiVersion: kagent.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: github-issues
+  namespace: kagent
+spec:
+  transportType: stdio
+  stdioTransport: {}
+  deployment:
+    image: ghcr.io/github/github-mcp-server
+    cmd: ./github-mcp-server
+    args: ["stdio"]
+    port: 3000
+    env:
+      GITHUB_TOOLSETS: "issues"
+    secretRefs:
+      - name: github-creds        # -> envFrom; must carry GITHUB_PERSONAL_ACCESS_TOKEN
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "250m"
+        memory: "256Mi"
