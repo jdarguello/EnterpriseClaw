@@ -3,6 +3,9 @@ source ../git/main.nu
 source pre-condition/main.nu
 source service-mesh/main.nu
 
+source ../gitops/app-of-apps.nu
+source ../gitops/broker-exposure.nu
+
 def "main kube-tools bootstrap" [
     --git-provider: string
     --cloud-provider:   string
@@ -21,7 +24,14 @@ def "main kube-tools bootstrap" [
     #3. Service Mesh preconditioning
     main service-mesh preconditioning --cloud-provider=$cloud_provider
 
-    #4. Push to registry
+    #4. Register the agentic platform (kagent trio + agentic CRs) and the Session-Broker into the
+    #   tenant app-of-apps, plus their Istio internet exposure — all before the push so Argo CD
+    #   reconciles them on first sync. See cli/gitops/app-of-apps.nu + broker-exposure.nu.
+    app-of-apps register-agents
+    app-of-apps register-session-broker
+    broker-exposure render --domain=($env.domain_name | str trim -c '"')
+
+    #5. Push to registry
     if ($gitops_setup == "push") {
         git-registry push --git-provider=$git_provider --commit-message="gitops: identifier patches"
     }
