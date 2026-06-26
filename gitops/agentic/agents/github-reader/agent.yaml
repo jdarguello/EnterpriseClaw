@@ -2,7 +2,7 @@
 #
 # Role in §2.2: the no-token branch. general-classifier (toolless triage) decides intent; for an
 # INFORMATIONAL request from an unauthenticated user, the Workflow routes here. This agent reads GitHub
-# issues + pull requests to answer, and can do nothing else. It is the deliberate, bounded relaxation of
+# issues to answer, and can do nothing else. It is the deliberate, bounded relaxation of
 # §2.2's original "JWT-less door has NO MCP permissions": it now has exactly ONE, physically read-only,
 # MCP.
 #
@@ -26,8 +26,8 @@ metadata:
 spec:
   type: Declarative
   description: >-
-    Read-only GitHub agent for unauthenticated users. Reads issues + pull requests via a physically
-    read-only MCP to answer informational questions. Cannot write and cannot reach the write MCPs.
+    Read-only GitHub agent for unauthenticated users. Reads issues via a physically read-only MCP to
+    answer informational questions. Cannot write and cannot reach the write MCPs.
   declarative:
     modelConfig: bedrock-claude-haiku
     deployment:
@@ -41,8 +41,9 @@ spec:
           memory: "512Mi"
     systemMessage: |
       You are the EnterpriseClaw read-only GitHub assistant, available to anyone — no sign-in required.
-      You can READ GitHub issues and pull requests to answer questions: the status of an issue, what a
-      pull request changes, what is currently open, who is involved, and so on.
+      You can READ GitHub issues to answer questions: the status of an issue, what is currently open,
+      who is involved, the labels and issue types in play, and so on. (You cannot read pull requests
+      yet — that capability is not enabled.)
 
       You cannot create, edit, comment on, label, close, or merge anything, and you cannot provision
       infrastructure. Those are not failures of permission you should work around — the capability does
@@ -51,17 +52,13 @@ spec:
       have done it: explain plainly that it requires signing in (and, for provisioning, a suitable
       role), and suggest they authenticate to proceed.
 
-      Be concise. Cite the issue or PR number and link whenever the tools return one.
+      Be concise. Cite the issue number and link whenever the tools return one.
     a2aConfig:
       skills:
         - id: read-github-issues
           name: Read GitHub issues
-          description: Look up, search, and summarize GitHub issues (read-only).
+          description: Look up, search, and summarize GitHub issues, labels, and issue types (read-only).
           tags: ["github", "issues", "read"]
-        - id: read-github-pull-requests
-          name: Read GitHub pull requests
-          description: Look up, list, and summarize GitHub pull requests (read-only).
-          tags: ["github", "pull-requests", "read"]
     tools:
       - type: McpServer
         mcpServer:
@@ -69,6 +66,7 @@ spec:
           kind: MCPServer
           apiGroup: kagent.dev
           name: github-readonly
-          # Conservative read tool-names (verified live names; the MCP is --read-only regardless).
-          toolNames: ["issue_read", "list_issues", "search_issues", "pull_request_read", "list_pull_requests"]
+          # Verified live names (GITHUB_TOOLSETS=issues + --read-only) — issue reads only, no PR/write.
+          # Upstream renamed create_issue->issue_write, get_issue->issue_read; --read-only drops the writes.
+          toolNames: ["issue_read", "list_issues", "search_issues", "list_issue_types", "get_label"]
           # NO allowedHeaders: this path carries no user bearer to forward.

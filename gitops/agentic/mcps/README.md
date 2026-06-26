@@ -11,7 +11,7 @@ needed (the granularity the dry-run proved, [§2.2](../../.claude/CLAUDE.md)):
 |---|---|---|---|
 | `github-issues` | `issues` | **auth** baseline (`agent-user`) | agentgateway route requires `issue:create` (client `issue-tracker`) |
 | `infra-provisioning` | `repos,pull_requests` | **auth** senior (`senior-engineer`) | agentgateway route requires `db:provision:dev` (client `infra-provisioner`) |
-| `github-readonly` | `issues,pull_requests` (`--read-only`) | **unauth** (no JWT) | the tool surface itself — `--read-only` registers zero write tools; no gateway route |
+| `github-readonly` | `issues` (`--read-only`) | **unauth** (no JWT) | the tool surface itself — `--read-only` registers zero write tools; no gateway route |
 
 The two **auth** MCPs are gated one hop in front, in [../mcp-gateway/](../mcp-gateway/) (the agentgateway
 `Gateway` + `HTTPRoute` + `AgentgatewayPolicy` that validate the Keycloak JWT and claim-gate each route).

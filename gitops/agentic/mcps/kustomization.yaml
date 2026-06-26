@@ -2,8 +2,8 @@
 # TOOLSET-SCOPED so the privilege tiers are split at the MCP/route level (no per-tool CEL):
 #   - github-issues       (toolset: issues)              -> AUTH: gated on capability issue:create
 #   - infra-provisioning  (toolset: repos,pull_requests) -> AUTH: gated on capability db:provision:dev
-#   - github-readonly     (toolset: issues,pull_requests, --read-only) -> UNAUTH: no JWT; physically
-#                          read-only; reached directly by the github-reader agent (no gateway route)
+#   - github-readonly     (toolset: issues, --read-only) -> UNAUTH: no JWT; physically read-only;
+#                          reached directly by the github-reader agent (no gateway route)
 # The auth gating lives in ../mcp-gateway/ (agentgateway routes + AgentgatewayPolicy); github-readonly
 # has NO route there by design (no user JWT to validate — the read-only tool surface is the boundary).
 # The `agentic` ApplicationSet syncs this directory as the `agentic-mcps` Application.

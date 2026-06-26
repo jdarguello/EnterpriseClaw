@@ -147,6 +147,14 @@ spec:
 
 Provided by **kmcp** (bundled in the kagent chart; `kmcp.enabled`). Use this instead of `RemoteMCPServer` when EnterpriseClaw should *host* the MCP (e.g. the GitHub MCP for the demo's PR-open path). Reference it from an Agent with `kind: MCPServer`. Verify the exact `MCPServer` spec (image/transport/env/command) with `kubectl explain mcpserver.spec` after install — kmcp's API has churned (ToolServer→kmcp) and the spec is the least-stable of the set.
 
+**Verified `MCPServer` shape (`kagent.dev/v1alpha1`, dry-run 2026-06-26):** `spec.transportType: stdio` + `spec.stdioTransport: {}` + `spec.deployment.{image, cmd, args[], port, env{}, secretRefs[].name, resources}`. `secretRefs` → `envFrom` (every Secret key becomes an env var). kmcp renders a Deployment + Service `<name>:3000` and runs **agentgateway as an in-pod stdio→HTTP adapter** (the single container is named `mcp-server`; it spawns the stdio binary). **Gotcha:** changing `spec.deployment.env` (e.g. `GITHUB_TOOLSETS`) takes effect via the adapter's **live config reload — no new pod / `creationTimestamp` unchanged**; a `tools/list` taken immediately after `kubectl apply` can still show the *old* toolset (reload lag), and `kubectl exec … env` won't show the var (it's passed to the stdio subprocess via the adapter config, not the container env). Re-query after a few seconds.
+
+**github-mcp-server specifics (image `ghcr.io/github/github-mcp-server`, `cmd: ./github-mcp-server`, `args: ["stdio", …]`):**
+- **`--read-only` is the physical write boundary** — with it, the server registers *only* read tools; there is literally no write tool on the wire (proven: a `--read-only` server exposes zero `*_write`/create/merge/comment tools). Use it for any agent that must not mutate (e.g. the unauth `github-reader`).
+- **`GITHUB_TOOLSETS` env** scopes the surface, e.g. `"issues"`, `"issues,pull_requests"`, `"repos,pull_requests"`. Each domain's search tool ships *in that domain's toolset* (so `issues` includes `search_issues`).
+- Token via env **`GITHUB_PERSONAL_ACCESS_TOKEN`** (deliver through `secretRefs` → a Secret with that exact key).
+- **⚠ Upstream renamed the issue tools** (bit us twice): `create_issue`→`issue_write`, `get_issue`→`issue_read`. Verified `issues`-toolset **read** names (`--read-only`): `issue_read`, `list_issues`, `search_issues`, `list_issue_types`, `get_label`. `pull_requests` adds `pull_request_read`, `list_pull_requests`, `search_pull_requests`. **Always `tools/list` the live MCP and set `toolNames` from that** — don't trust remembered names.
+
 ---
 
 ## agentgateway routing/auth CRDs (`agentgateway.dev/v1alpha1`)

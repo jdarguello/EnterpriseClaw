@@ -2,13 +2,14 @@
 #
 # Role: the single tool available on the JWT-less door (CLAUDE.md §2.2). It backs the `github-reader`
 # agent that anonymous users reach without signing in. It exists so the unauthenticated experience can
-# answer real questions from GitHub (issue/PR status) WITHOUT ever being able to mutate anything.
+# answer real questions from GitHub (issue status) WITHOUT ever being able to mutate anything.
 #
 # THE HARD BOUNDARY IS HERE, NOT IN THE AGENT. github-mcp-server is launched with `--read-only`, so it
 # registers ONLY read tools — there is physically no write tool to call. A prompt-injected reader agent
 # therefore cannot create/edit/merge anything: the capability simply does not exist on the wire. This is
 # the project thesis applied to the anonymous path — "the model is not the security boundary, the mesh
-# (here, the tool surface) is." Toolset-scoped to `issues,pull_requests` to bound the read surface too.
+# (here, the tool surface) is." Toolset-scoped to `issues` to bound the read surface too (issue-reading
+# only for now; add `pull_requests` here + the PR tools/skill in github-reader to extend it).
 #
 # NO agentgateway route in front (unlike github-issues/infra-provisioning): this path carries no user
 # JWT, so there is nothing to validate at L7. The reader agent references THIS MCPServer directly
@@ -34,7 +35,7 @@ spec:
     args: ["stdio", "--read-only"]   # registers ONLY read tools — the physical write boundary
     port: 3000
     env:
-      GITHUB_TOOLSETS: "issues,pull_requests"
+      GITHUB_TOOLSETS: "issues"
     secretRefs:
       - name: github-readonly-creds   # -> envFrom; dedicated READ-scoped GITHUB_PERSONAL_ACCESS_TOKEN
     resources:
