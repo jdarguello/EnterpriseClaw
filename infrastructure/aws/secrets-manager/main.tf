@@ -51,6 +51,13 @@ resource "random_password" "keycloak_alice_password" {
   special = false
 }
 
+# Redis (Session-Broker cache) auth password — the broker repo's redis chart
+# sets auth.existingSecret=redis-secret / key redis-password.
+resource "random_password" "keycloak_redis_password" {
+  length  = 32
+  special = false
+}
+
 resource "aws_secretsmanager_secret" "keycloak_internal" {
   name = "keycloak-internal"
   # Ephemeral demo platform: destroyed + recreated each init. A 30-day
@@ -72,6 +79,7 @@ resource "aws_secretsmanager_secret_version" "keycloak_internal" {
     "session-broker-client-secret"    = random_password.keycloak_session_broker_client_secret.result
     "kagent-controller-client-secret" = random_password.keycloak_kagent_controller_client_secret.result
     "alice-password"                  = random_password.keycloak_alice_password.result
+    "redis-password"                  = random_password.keycloak_redis_password.result
   })
 }
 

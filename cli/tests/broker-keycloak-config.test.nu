@@ -50,7 +50,7 @@ def "broker-keycloak-config-tests" [] {
             assert equal ($br.data.KEYCLOAK_REDIRECT_URI) "https://broker.enterprise-claw.io/auth/callback"
 
             let k = (open $"($dir)/kustomization.yaml")
-            # the overlay now spans the two hostname CMs PLUS the four ExternalSecrets
+            # the overlay now spans the two hostname CMs PLUS the five ExternalSecrets
             assert equal $k.resources [
                 "keycloak-hostnames-cm.yaml"
                 "broker-hostnames-cm.yaml"
@@ -58,6 +58,7 @@ def "broker-keycloak-config-tests" [] {
                 "external-secret-keycloak-postgresql.yaml"
                 "external-secret-keycloak-realm.yaml"
                 "external-secret-session-broker.yaml"
+                "external-secret-redis.yaml"
             ]
             cd $cwd
             rm -rf $tmp
@@ -165,8 +166,20 @@ def "broker-keycloak-config-tests" [] {
             assert equal $broker_client.remoteRef.property "session-broker-client-secret"
         }}
 
-        # ---- kustomization now lists all six resources (2 CMs + 4 ExternalSecrets) ----
-        { name: "kustomization lists both ConfigMaps and all four ExternalSecrets", run: {||
+        # ---- ExternalSecret: redis ----
+        { name: "es-redis pulls redis-password into ns redis", run: {||
+            let es = (broker-keycloak-config es-redis)
+            assert equal $es.metadata.name "redis-secret"
+            assert equal $es.metadata.namespace "redis"
+            assert equal ($es.spec.data | length) 1
+            let d = ($es.spec.data | get 0)
+            assert equal $d.secretKey "redis-password"
+            assert equal $d.remoteRef.key "keycloak-internal"
+            assert equal $d.remoteRef.property "redis-password"
+        }}
+
+        # ---- kustomization now lists all seven resources (2 CMs + 5 ExternalSecrets) ----
+        { name: "kustomization lists both ConfigMaps and all five ExternalSecrets", run: {||
             let k = (broker-keycloak-config kustomization)
             assert equal $k.resources [
                 "keycloak-hostnames-cm.yaml"
@@ -175,6 +188,7 @@ def "broker-keycloak-config-tests" [] {
                 "external-secret-keycloak-postgresql.yaml"
                 "external-secret-keycloak-realm.yaml"
                 "external-secret-session-broker.yaml"
+                "external-secret-redis.yaml"
             ]
         }}
 
@@ -198,7 +212,7 @@ def "broker-keycloak-config-tests" [] {
 
             # kustomization on disk matches the generator
             let k = (open $"($dir)/kustomization.yaml")
-            assert equal ($k.resources | length) 6
+            assert equal ($k.resources | length) 7
             cd $cwd
             rm -rf $tmp
         }}

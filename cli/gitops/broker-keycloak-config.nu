@@ -168,6 +168,24 @@ def "broker-keycloak-config es-session-broker" [] {
     }
 }
 
+# Redis (Session-Broker cache) auth secret (ns redis): the broker repo's redis chart
+# sets auth.existingSecret=redis-secret / existingSecretPasswordKey=redis-password.
+def "broker-keycloak-config es-redis" [] {
+    {
+        apiVersion: "external-secrets.io/v1beta1"
+        kind: "ExternalSecret"
+        metadata: { name: "redis-secret", namespace: "redis" }
+        spec: {
+            refreshInterval: "1h"
+            secretStoreRef: { name: "git-creds-secretstore", kind: "ClusterSecretStore" }
+            target: { name: "redis-secret", creationPolicy: "Owner" }
+            data: [
+                { secretKey: "redis-password", remoteRef: { key: "keycloak-internal", property: "redis-password" } }
+            ]
+        }
+    }
+}
+
 # kustomization for the config/session-broker-keycloak/ directory.
 def "broker-keycloak-config kustomization" [] {
     { resources: [
@@ -177,6 +195,7 @@ def "broker-keycloak-config kustomization" [] {
         "external-secret-keycloak-postgresql.yaml"
         "external-secret-keycloak-realm.yaml"
         "external-secret-session-broker.yaml"
+        "external-secret-redis.yaml"
     ] }
 }
 
@@ -217,6 +236,9 @@ def "broker-keycloak-config render" [
 
     (broker-keycloak-config es-session-broker
     ) | to yaml | save $"($dir)/external-secret-session-broker.yaml" --force
+
+    (broker-keycloak-config es-redis
+    ) | to yaml | save $"($dir)/external-secret-redis.yaml" --force
 
     (broker-keycloak-config kustomization) | to yaml | save $"($dir)/kustomization.yaml" --force
 }
