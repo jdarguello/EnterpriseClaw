@@ -34,7 +34,7 @@ registers them idempotently in its root `kustomization.yaml`:
 |---|---|---|---|
 | `agents.yaml` | ApplicationSet `agents` | PUBLIC repo `gitops/helm/agents/*` | kagent-trio **installer**; sync-wave `1` |
 | `agentic.yaml` | ApplicationSet `agentic` | PUBLIC repo `gitops/agentic/*` | the **CRs** (Agents/MCPs/gateways); sync-wave `2`; ns `kagent` |
-| `session-broker.yaml` | Application `session-broker` | **broker repo** `gitops` + `directory.include: bootstrap.yaml` | applies ONLY the broker's `session-broker-platform` ApplicationSet |
+| `session-broker.yaml` | Application **`session-broker-bootstrap`** | **broker repo** `gitops` + `directory.include: bootstrap.yaml` | applies ONLY the broker's `session-broker-platform` ApplicationSet. **Name is `session-broker-bootstrap`, NOT `session-broker`** — the AppSet generates a child named `session-broker`; sharing the name = one Argo object, two owners → `resources-finalizer` deadlock that cascade-prunes keycloak/redis/dapr (fixed 2026-06-29). |
 
 - **Pure generators** (`app-of-apps agents-appset` / `agentic-appset` / `session-broker-app` /
   `merge-resources`) return records — unit-tested, no IO.
@@ -83,12 +83,13 @@ auto-onboards** as `config-session-broker`.
   re-run against a live cluster the controller reconciles the existing per-tool ALBs into the shared one
   (some churn) — acceptable for the ephemeral init/destroy flow.
 
-### `cli/gitops/broker-keycloak-config.nu` — tenant Keycloak/broker hostnames
+### `cli/gitops/broker-keycloak-config.nu` — tenant Keycloak/broker hostnames **+ secret wiring**
 
 The tenant external host (`auth.<domain>` / `broker.<domain>`) is end-user config the broker repo cannot
 know. `broker-keycloak-config render` resolves it from `$env.domain_name` and writes **two `keycloak-hostnames`
-ConfigMaps** into the private repo's `config/session-broker-keycloak/` (its own kustomization → its own
-`config-session-broker-keycloak` Argo app, auto-onboarded by the `configs` ApplicationSet):
+ConfigMaps PLUS five ExternalSecrets** into the private repo's `config/session-broker-keycloak/` (its own
+kustomization → its own `config-session-broker-keycloak` Argo app, auto-onboarded by the `configs`
+ApplicationSet). The ConfigMaps:
 
 | File | ConfigMap (ns) | Keys |
 |---|---|---|
@@ -98,8 +99,45 @@ ConfigMaps** into the private repo's `config/session-broker-keycloak/` (its own 
 - Pure generators (`keycloak-cm` / `broker-cm` / `kustomization`) are unit-tested; `render` is the IO.
 - **Labels/realm are configurable** (`--auth-label` / `--broker-label` / `--realm`, default `auth`/`broker`/`enterpriseclaw`)
   and **MUST stay aligned with `broker-exposure`** — the issuer host is the host the ALB+Istio admit.
-- Host values are **non-secret**, so a ConfigMap (not the out-of-band `keycloak-realm-secrets` Secret) is the
+- Host values are **non-secret**, so a ConfigMap (not the `keycloak-realm-secrets` Secret) is the
   vehicle; the broker reads them with `extraEnvVarsCM`.
+
+## Secret wiring (built 2026-06-29) — EnterpriseClaw fills the charts' `existingSecret`s
+
+The broker/Keycloak/Redis charts declare `existingSecret` names + realm `$(env:…)` keys but don't supply the
+values. EnterpriseClaw provisions them through **two layers**:
+
+**1. The SM source — `infrastructure/aws/secrets-manager/`.** The module now *creates* (not just reads) one SM
+secret **`keycloak-internal`** via `random_password` (7 keys: `admin-password`, `postgres-password`, `password`,
+`session-broker-client-secret`, `kagent-controller-client-secret`, `alice-password`, `redis-password`),
+`recovery_window_in_days = 0` so destroy hard-deletes it. Externally-managed secrets stay read-referenced via
+`secrets_registries` in `cli/infra/vars.nu` (now includes `google-idp` + `github-readonly-token`). The read
+policy is **scoped to EXACT ARNs**, so any SM key an ExternalSecret reads must be in `secrets_registries` or
+created by the module. **`terraform_user` therefore needs SM `CreateSecret`/`PutSecretValue`/`TagResource`/
+`DeleteSecret`** — it only read before; a read-only identity fails the apply on `aws_secretsmanager_secret_version`.
+
+**2. The ExternalSecrets — `broker-keycloak-config.nu` generators** (all `git-creds-secretstore` ClusterSecretStore,
+`spec.data` with `remoteRef.key`+`property`):
+
+| File / target Secret (ns) | Keys ← SM source |
+|---|---|
+| `external-secret-keycloak-admin.yaml` → `keycloak-admin-secret` (keycloak) | `admin-password` ← `keycloak-internal` |
+| `external-secret-keycloak-postgresql.yaml` → `keycloak-postgresql-secret` (keycloak) | `password`, `postgres-password` ← `keycloak-internal` |
+| `external-secret-keycloak-realm.yaml` → `keycloak-realm-secrets` (keycloak) | `SESSION_BROKER_CLIENT_SECRET`/`KAGENT_CONTROLLER_CLIENT_SECRET`/`ALICE_PASSWORD` ← `keycloak-internal`; **`GOOGLE_CLIENT_SECRET` ← `google-idp`/`CLIENT_SECRET`** |
+| `external-secret-session-broker.yaml` → `session-broker-secret` (session-broker) | `keycloak-client-secret` ← `keycloak-internal`/`session-broker-client-secret` |
+| `external-secret-redis.yaml` → `redis-secret` (redis) | `redis-password` ← `keycloak-internal` |
+
+- **CRITICAL shared secret:** `session-broker-secret/keycloak-client-secret` and
+  `keycloak-realm-secrets/SESSION_BROKER_CLIENT_SECRET` source the **SAME** `keycloak-internal`/`session-broker-client-secret`
+  property — the broker and Keycloak's `session-broker` client must agree on the OAuth secret. One SM property feeds
+  both so they can't drift. (Same idea for `KAGENT_CONTROLLER_CLIENT_SECRET` ↔ the kagent discovery token.)
+- The realm-import Job (`keycloak-config-cli`, a Helm hook) consumes `keycloak-realm-secrets` and runs once it exists;
+  its success (realm `enterpriseclaw` serving discovery) confirms all four realm secrets were consumed correctly.
+- The overlay legitimately **spans namespaces** (keycloak / session-broker / redis) — Argo honors each manifest's
+  explicit `metadata.namespace`. These ExternalSecrets are domain-independent (framework constants), generated into
+  the private overlay alongside the tenant hostname CMs; on the eventual OSS split they could move to the public repo.
+- **Related fix:** the kagent `github-readonly` ExternalSecret (`gitops/agentic/mcps/`) reads `github-readonly-token`/`GH_TOKEN`
+  → target key `GITHUB_PERSONAL_ACCESS_TOKEN` (it had been pointing at a non-existent SM key `github-readonly-creds`).
 
 ## STILL OPEN — the BROKER-SIDE change the user applies (chosen: "EC side only; you do broker")
 

@@ -77,12 +77,14 @@ not on mere auth state.
 
 | Owned by the **Session-Broker repo** | Owned by **EnterpriseClaw** |
 |---|---|
-| Keycloak, Redis, Dapr | Argo Events/Workflows, Istio, the **kagent trio** |
+| Keycloak, Redis, Dapr (the **charts**) | Argo Events/Workflows, Istio, the **kagent trio** |
 | The OAuth **write/read paths** (Google federation, `code→token`) | The **consumer side**: Workflow Step 0, the login-wall |
 | Keycloak realm/clients/roles, `KC_HOSTNAME` | **Istio internet exposure** of broker + keycloak |
+| The chart **values** (`existingSecret` *names*, realm `$(env:…)` *keys*) | **The SECRET VALUES those charts consume** — provisioned here via SM `keycloak-internal` + `google-idp` → ExternalSecrets (see below) |
 | | The **agentgateway authz policy** (claim → agent/MCP/tool) |
 
 The Keycloak helm-app **left this repo in `796d38e`**. The agent calls the broker, **never Keycloak directly**.
+**But secret management lives here:** the broker repo's charts declare `existingSecret` names + realm `$(env:…)` keys; **EnterpriseClaw fills them** (SM `keycloak-internal` + the externally-managed `google-idp`, surfaced as ExternalSecrets by `cli/gitops/broker-keycloak-config.nu`). See `reference/enterpriseclaw-integration.md` → "Secret wiring".
 
 ## Gotchas that will bite you
 
@@ -103,6 +105,20 @@ The Keycloak helm-app **left this repo in `796d38e`**. The agent calls the broke
 5. **GitHub auth still uses the App/bot creds** — the user JWT governs *whether* the human may invoke a tool
    (agentgateway authz) but stops at the gateway; it does **not** reach GitHub. Human attribution lives in the
    Argo Workflow archive + agentgateway trace.
+6. **NAME COLLISION (cost a full stack-prune 2026-06-29).** The Application that installs the broker's
+   `session-broker-platform` ApplicationSet **must be named `session-broker-bootstrap`, NOT `session-broker`** —
+   the AppSet generates a *child* literally named `session-broker` (the broker overlay). Sharing the name makes
+   one Argo object owned by two controllers (the app-of-apps installer + the AppSet) that flip-flop the source
+   and **deadlock on the `resources-finalizer`** (wedges in `Terminating`); clearing that finalizer then
+   completes the pending deletion and **cascade-prunes keycloak/redis/dapr**. Fixed in `cli/gitops/app-of-apps.nu`
+   (`session-broker-app` generator). If you ever recreate a pruned broker tree, fix the name collision *first*.
+7. **The stack stays in `CreateContainerConfigError` until its secrets exist.** keycloak (`keycloak-admin-secret`,
+   `keycloak-postgresql-secret`, `keycloak-realm-secrets`), session-broker (`session-broker-secret`), and redis
+   (`redis-secret`) all reference `existingSecret`s EnterpriseClaw must provide — the SM secret `keycloak-internal`
+   must exist (created by the `secrets-manager` tofu module) and `terraform_user` needs SM **write** perms to create
+   it. `google-idp` (Google OAuth `CLIENT_ID`/`CLIENT_SECRET`) must pre-exist in SM for the realm's Google IdP.
+   The realm-import Job (`keycloak-config-cli`) only runs once `keycloak-realm-secrets` exists. See
+   `reference/enterpriseclaw-integration.md` → "Secret wiring".
 
 ## How EnterpriseClaw installs + exposes it
 
