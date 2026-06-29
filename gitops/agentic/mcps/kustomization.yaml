@@ -8,14 +8,18 @@
 # has NO route there by design (no user JWT to validate — the read-only tool surface is the boundary).
 # The `agentic` ApplicationSet syncs this directory as the `agentic-mcps` Application.
 #
-# PREREQ (NOT committed), both in ns kagent, key GITHUB_PERSONAL_ACCESS_TOKEN:
+# PREREQ: both in ns kagent, key GITHUB_PERSONAL_ACCESS_TOKEN — now materialized by ExternalSecrets
+# below (external-secret-github-creds.yaml, external-secret-github-readonly-creds.yaml). Each SM
+# secret must carry a GITHUB_PERSONAL_ACCESS_TOKEN field; see the ExternalSecret files for details.
 #   - `github-creds`          (read/write) — github-issues + infra-provisioning envFrom it
 #   - `github-readonly-creds` (READ-scoped) — github-readonly envFrom it; defines the anonymous blast
-#     radius, so scope it to public/specific repos only. Without these the respective pods stay NotReady.
+#     radius, so scope it to public/specific repos only.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: kagent          # kagent controller WATCH_NAMESPACES=kagent — CRs MUST live here
 resources:
+  - external-secret-github-creds.yaml
+  - external-secret-github-readonly-creds.yaml
   - github-issues.yaml
   - infra-provisioning.yaml
   - github-readonly.yaml
