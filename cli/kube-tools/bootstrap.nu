@@ -5,6 +5,7 @@ source service-mesh/main.nu
 
 source ../gitops/app-of-apps.nu
 source ../gitops/broker-exposure.nu
+source ../gitops/kagent-exposure.nu
 source ../gitops/broker-keycloak-config.nu
 
 def "main kube-tools bootstrap" [
@@ -35,6 +36,8 @@ def "main kube-tools bootstrap" [
     app-of-apps register-agents
     app-of-apps register-session-broker
     broker-exposure render --domain=$broker_domain --subnets=$broker_subnets
+    # Expose the kagent dashboard UI (ai-platform.<domain>) on the same shared platform ALB.
+    kagent-exposure render --domain=$broker_domain --subnets=$broker_subnets
     # Tenant Keycloak/broker external hostnames (the CLI owns the value; the broker repo consumes the
     # ConfigMaps via its $(env:...) seam — see cli/gitops/broker-keycloak-config.nu).
     broker-keycloak-config render --domain=$broker_domain

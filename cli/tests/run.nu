@@ -7,6 +7,7 @@
 
 source app-of-apps.test.nu
 source broker-exposure.test.nu
+source kagent-exposure.test.nu
 source broker-keycloak-config.test.nu
 source service-mesh.test.nu
 source external-secrets.test.nu
@@ -15,6 +16,7 @@ def main [] {
     let suites = [
         { name: "app-of-apps", tests: (app-of-apps-tests) }
         { name: "broker-exposure", tests: (broker-exposure-tests) }
+        { name: "kagent-exposure", tests: (kagent-exposure-tests) }
         { name: "broker-keycloak-config", tests: (broker-keycloak-config-tests) }
         { name: "service-mesh", tests: (service-mesh-tests) }
         { name: "external-secrets", tests: (external-secrets-tests) }

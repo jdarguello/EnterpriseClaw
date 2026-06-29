@@ -21,6 +21,18 @@ def --env "cluster aws setup tfvars" [
                 {
                     "name": $"events",
                     "url": $"events.($env.domain_name)"
+                },
+                {
+                    "name": $"auth",
+                    "url": $"auth.($env.domain_name)"
+                },
+                {
+                    "name": $"ai-platform",
+                    "url": $"ai-platform.($env.domain_name)"
+                },
+                {
+                    "name": $"broker",
+                    "url": $"broker.($env.domain_name)"
                 }
             ]
         },
