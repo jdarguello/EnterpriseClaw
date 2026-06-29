@@ -55,16 +55,17 @@ def --env "main destroy" [
     #1. Cluster connection
     main cluster connect --cloud-provider=$cloud_provider --region=$env.region --cluster-name=$"($cluster_name)-cluster"
 
-    #2. Delete ALB and DNS
-    main teardown gitops --gitops-agent=$gitops_agent
+    #2. Drain the load balancers (ALB/NLBs/Classic-ELB) + their managed SGs and DNS, then wait until
+    #   AWS has actually released them — so `tofu destroy` is not blocked by DependencyViolation on
+    #   the VPC nor by ResourceInUse on the ACM cert. (Replaces the old blind `sleep 120sec`, which
+    #   raced the controller teardown; the wait now lives inside `main teardown gitops`.)
+    main teardown gitops --gitops-agent=$gitops_agent --cloud-provider=$cloud_provider --cluster-name=$cluster_name
 
     #3. Delete Image Registry (REVIEW)
     #containers destroy all --path=$image_path_base
-    
-    sleep 120sec         #Espera un tiempo para la reconciliación
 
     #4. Destroy all infrastructure
-    main destroy infra
+    main destroy infra --cloud-provider=$cloud_provider
 }
 
 def "main destroy infra" [
