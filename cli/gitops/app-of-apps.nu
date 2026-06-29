@@ -93,6 +93,13 @@ def "app-of-apps agentic-appset" [
 # `session-broker-platform` ApplicationSet, which in turn installs keycloak/redis/dapr/broker).
 # `directory.include` scopes the source path to that single file so the other gitops/ files
 # (helm values, kustomize bases) are not applied as loose manifests.
+#
+# NAME = "session-broker-bootstrap" (NOT "session-broker"): the AppSet this installs generates
+# a child Application literally named "session-broker" (the broker overlay). If this installer
+# were also named "session-broker" the two would be the SAME argocd object owned by two
+# controllers (this app-of-apps + the AppSet) — they flip-flop the source and eventually
+# deadlock on the resources-finalizer (observed: the object wedged in Terminating, pruning
+# keycloak/redis/dapr with it). The distinct installer name keeps the two objects separate.
 def "app-of-apps session-broker-app" [
     --broker-repo = "https://github.com/jdarguello/Session-Broker"
     --revision    = "main"
@@ -102,7 +109,7 @@ def "app-of-apps session-broker-app" [
         apiVersion: "argoproj.io/v1alpha1"
         kind: "Application"
         metadata: {
-            name: "session-broker"
+            name: "session-broker-bootstrap"
             namespace: "argocd"
             annotations: { "argocd.argoproj.io/sync-wave": $sync_wave }
         }

@@ -38,7 +38,7 @@ def "app-of-apps-tests" [] {
         { name: "session-broker-app targets broker repo bootstrap only", run: {||
             let m = (app-of-apps session-broker-app)
             assert equal $m.kind "Application"
-            assert equal $m.metadata.name "session-broker"
+            assert equal $m.metadata.name "session-broker-bootstrap"
             assert equal ($m.spec.source.repoURL) "https://github.com/jdarguello/Session-Broker"
             assert equal ($m.spec.source.path) "gitops"
             assert equal ($m.spec.source.directory.include) "bootstrap.yaml"
