@@ -3,10 +3,13 @@
 # globs the leaf dirs directly), so this file is only the prod group-level aggregator.
 # CRDs (sync-wave 0) listed before controllers (sync-wave 1) for readability.
 resources:
+# --- Infrastructure prereqs (sync-wave -1) ---
+- gateway-api-crds/         # gateway.networking.k8s.io CRDs — required by agentgateway and all Gateway/HTTPRoute CRs
+                             # Previously assumed "Istio supplies these in prod" (CLAUDE.md §5); now explicitly managed.
 # --- CRDs (sync-wave 0) ---
 - kagent-crds/
 - kmcp-crds/
-- agentgateway-crds/        # agentgateway.dev CRDs only (NOT gateway.networking.k8s.io — Istio owns those)
+- agentgateway-crds/        # agentgateway.dev CRDs only (NOT gateway.networking.k8s.io — see gateway-api-crds above)
 # --- controllers (sync-wave 1) ---
 - kagent/
 - kmcp/

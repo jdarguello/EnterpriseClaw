@@ -1,0 +1,22 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+  annotations:
+    # Mark as the cluster default so PVCs with no storageClassName bind automatically once
+    # the EBS CSI driver (ebs.csi.aws.com) is up. The legacy gp2 in-tree provisioner is
+    # non-functional on EKS 1.32+, and gp2 is NOT the cluster default in this config.
+    storageclass.kubernetes.io/is-default-class: "true"
+    # sync-wave -1: must exist before any stateful workload (kagent, redis, postgres, etc.)
+    # attempts to create a PVC. Addresses the §6 "no sync-wave ordering" fragility.
+    argocd.argoproj.io/sync-wave: "-1"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  # gp3 defaults: 3000 IOPS, 125 MiB/s throughput — no extra cost vs gp2 at baseline.
+  # Tenants may override by creating a separate StorageClass with explicit iopsPerGB/throughput.
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer   # delays PV binding until a Pod is scheduled; avoids
+                                           # cross-AZ attachment failures on multi-AZ EKS clusters.
+allowVolumeExpansion: true                 # allows PVC resize without pod restart (online resize
+                                           # supported by EBS CSI driver for gp3 volumes).

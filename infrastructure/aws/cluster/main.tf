@@ -24,6 +24,10 @@ module "eks" {
     vpc-cni = {
       before_compute = true
     }
+    aws-ebs-csi-driver = {
+      most_recent              = true
+      service_account_role_arn = module.irsa_ebs_csi.arn
+    }
   }
 
   eks_managed_node_groups = {
@@ -80,5 +84,28 @@ module "eks" {
 
   tags = {
     Project = var.project
+  }
+}
+
+# IRSA role for the EBS CSI driver controller (ebs-csi-controller-sa in kube-system).
+# Matches the repo's established IRSA-via-OIDC pattern (iam-role-for-service-accounts,
+# bound to the cluster OIDC provider) used by the ALB, external-dns and secrets roles.
+# attach_ebs_csi_policy attaches the AWS-managed AmazonEBSCSIDriverPolicy.
+module "irsa_ebs_csi" {
+  source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+
+  name                   = "${var.cluster_name}-ebs-csi"
+  attach_ebs_csi_policy  = true
+
+  oidc_providers = {
+    ebs_csi_oidc = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["kube-system:ebs-csi-controller-sa"]
+    }
+  }
+
+  tags = {
+    OpenTofu    = "true"
+    Environment = "dev"
   }
 }

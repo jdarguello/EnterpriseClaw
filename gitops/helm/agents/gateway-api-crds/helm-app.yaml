@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gateway-api-crds
+  namespace: argocd
+  annotations:
+    # sync-wave -1: Gateway API CRDs must land before ALL consumers:
+    #   agentgateway controller (wave 0 CRDs, wave 1 controller) creates Gateway/HTTPRoute CRs
+    #   agentic-llm-gateway and agentic-mcp-gateway (agentic AppSet, wave 2) apply Gateway/HTTPRoute objects
+    # This addresses the §6 "no sync-wave ordering" fragility for the CRD→CR dependency chain.
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  project: default
+  source:
+    # Upstream standard-channel Gateway API CRDs (gateway.networking.k8s.io).
+    # Version: v1.2.1 — stable, compatible with Istio 1.30 and agentgateway/kgateway 1.3.1
+    # (agentgateway 1.3.1 builds against gateway-api v1.6.0-rc.1 but the v1 API surface —
+    # GatewayClass/Gateway/HTTPRoute/GRPCRoute — is stable and backward-compatible across 1.2/1.5/1.6).
+    # The dry-run VM uses v1.5.1 standard channel (gitops/dry-run/gateway-api-crds.yaml); we pin v1.2.1
+    # here for maximum Istio 1.30 compatibility (Istio 1.30 validates against gateway-api v1.2.x).
+    # Bump to v1.5.1 once Istio is upgraded to 1.32+.
+    repoURL: https://github.com/kubernetes-sigs/gateway-api
+    targetRevision: v1.2.1
+    path: config/crd              # kustomization.yaml here references only standard-channel files:
+                                #   GatewayClass, Gateway, HTTPRoute, GRPCRoute, ReferenceGrant
+                                # (config/crd/standard/ contains the raw YAMLs but has no kustomization.yaml)
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default            # CRDs are cluster-scoped; namespace is Argo bookkeeping only
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true      # Gateway API CRDs are large — avoids last-applied-config annotation size limit
+      - Replace=false
