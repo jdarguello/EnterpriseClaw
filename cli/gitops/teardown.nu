@@ -20,12 +20,14 @@
 #      so nothing re-creates / self-heals the resources we are about to delete — and, crucially, so
 #      deleting them does NOT also tear down the alb-controller. The alb-controller /
 #      cloud-controller / external-dns run in their own namespaces and keep working.
-#   2. Delete every load-balancer-creating resource (alb-class Ingresses + every type=LoadBalancer
-#      Service) while those controllers are still alive, so they cleanly deprovision the
-#      ALB / NLBs / Classic-ELB and their managed security groups (external-dns drops the DNS).
+#   2. Delete every load-balancer-creating resource while those controllers are still alive, so they
+#      cleanly deprovision the ALB / NLBs / Classic-ELB + managed SGs (external-dns drops the DNS):
+#      alb-class Ingresses (the ALB), Gateway-API Gateways (the agentgateway NLBs — delete the
+#      Gateway, not just its derived Service, or the agentgateway controller re-creates it), and any
+#      standalone type=LoadBalancer Service (the Istio Classic ELB).
 #   3. POLL AWS until no k8s-managed load balancers / security groups remain in the cluster VPC
-#      (replaces the blind sleep), with a best-effort force-clean fallback on timeout, before the
-#      caller proceeds to `tofu destroy`.
+#      (replaces the blind sleep), with a best-effort force-clean fallback on timeout; also sweep
+#      orphaned target groups (drain phase) and orphaned EBS volumes (after `tofu destroy`).
 
 def "main teardown gitops" [
     --gitops-agent:   string
@@ -102,6 +104,7 @@ def "wait-for-lb-drain" [
         print $"   elbv2=($elbv2)  classic=($classic)  k8s-SGs=($k8s_sgs)  \(waited ($waited)s)"
         if ($elbv2 == 0 and $classic == 0 and $k8s_sgs == 0) {
             print "✅ All load balancers + managed security groups released."
+            cleanup-orphaned-target-groups --vpc=$vpc --region=$region
             return
         }
         if ($waited >= $timeout) {
@@ -131,5 +134,41 @@ def "force-clean-lbs" [ --vpc: string --region: string ] {
     let sgs = (aws ec2 describe-security-groups --region $region --filters $"Name=vpc-id,Values=($vpc)"
         --output json | from json | get SecurityGroups | where {|s| $s.GroupName | str starts-with "k8s-" })
     for sg in $sgs { try { aws ec2 delete-security-group --region $region --group-id $sg.GroupId } }
+    cleanup-orphaned-target-groups --vpc=$vpc --region=$region
     print "   force-clean pass complete (any residual items will be retried by tofu destroy)."
+}
+
+# Delete elbv2 target groups the AWS Load Balancer Controller created in this VPC that no longer
+# back any load balancer. The controller normally removes them with the ALB/NLB, but a missed one
+# would linger as orphaned cruft (observed: target groups from prior cycles referencing dead VPCs).
+# VPC-scoped on purpose, so it can never touch another cluster's target groups in a shared account.
+def "cleanup-orphaned-target-groups" [ --vpc: string --region: string ] {
+    let tgs = (aws elbv2 describe-target-groups --region $region --output json
+        | from json | get TargetGroups
+        | where {|t| ($t.VpcId? == $vpc) and (($t.LoadBalancerArns? | default [] | length) == 0) }
+        | get TargetGroupArn)
+    if ($tgs | is-not-empty) {
+        print $"🧹 Deleting ($tgs | length) orphaned target group\(s) in VPC ($vpc)…"
+        for tg in $tgs { try { aws elbv2 delete-target-group --region $region --target-group-arn $tg } }
+    }
+}
+
+# Delete EBS volumes the EBS CSI driver dynamically provisioned from the platform's PVCs
+# (keycloak/redis/postgres/dapr/kagent). Terraform never tracked these, so destroying the EKS
+# cluster leaves them orphaned in `available` state — silently accruing cost. Run this AFTER
+# `tofu destroy` has removed the nodegroups: only then have the volumes detached to `available`.
+def "cleanup-orphaned-ebs" [ --cluster-name: string ] {     # full EKS name, e.g. enterpriseclaw-cluster
+    let region = ($env.region? | default "us-east-1")
+    let vols = (aws ec2 describe-volumes --region $region
+        --filters $"Name=tag-key,Values=kubernetes.io/cluster/($cluster_name)" "Name=status,Values=available"
+        --query 'Volumes[].VolumeId' --output json | from json)
+    if ($vols | is-empty) {
+        print "✅ No orphaned EBS volumes left by the cluster."
+        return
+    }
+    print $"🧹 Deleting ($vols | length) orphaned EBS volume\(s) left by the cluster's PVCs…"
+    for v in $vols {
+        print $"   • deleting ($v)"
+        try { aws ec2 delete-volume --region $region --volume-id $v }
+    }
 }

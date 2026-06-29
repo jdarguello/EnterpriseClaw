@@ -65,17 +65,25 @@ def --env "main destroy" [
     #containers destroy all --path=$image_path_base
 
     #4. Destroy all infrastructure
-    main destroy infra --cloud-provider=$cloud_provider
+    main destroy infra --cloud-provider=$cloud_provider --cluster-name=$cluster_name
 }
 
 def "main destroy infra" [
     --cloud-provider        = "aws"                 #Options: 'aws', 'azure' or 'gcp'
+    --cluster-name          = "enterpriseclaw"      #K8s cluster's name
     --local-testing         = false                 #If you're doing local testing, you might want to delete the 'bootstrap' tofu configuration
 ] {
     #1. Teardown infrastructure
     main cluster teardown --cloud-provider=$cloud_provider
 
-    #2. Delete persistant storage (for local testing)
+    #2. Sweep up the EBS volumes the CSI driver provisioned from the platform's PVCs
+    #   (keycloak/redis/postgres/dapr/kagent). Terraform never tracked them, so they survive
+    #   `tofu destroy` orphaned in `available` state — delete them so nothing lingers/costs.
+    if ($cloud_provider == "aws") {
+        cleanup-orphaned-ebs --cluster-name=$"($cluster_name)-cluster"
+    }
+
+    #3. Delete persistant storage (for local testing)
     if ($local_testing) {
         main cluster bootstrap destroy --cloud-provider=$cloud_provider
     }
