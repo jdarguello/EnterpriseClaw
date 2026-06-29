@@ -6,6 +6,7 @@ source cluster/connect.nu
 source kube-tools/bootstrap.nu
 source gitops/bootstrap.nu
 source gitops/teardown.nu
+source local/main.nu
 
 def "main" [] {
     enterpriseclaw -h

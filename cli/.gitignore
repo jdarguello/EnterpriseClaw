@@ -2,5 +2,6 @@
 
 gitops-config/
 tmp/
+.kube/
 
 github-app-key.pem
