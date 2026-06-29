@@ -117,6 +117,7 @@ def "external-secrets bootstrap gitops" [] {
     #1. Get Helm-ESO path from GitOps directory
     let eso_path = abs-path --path="gitops/helm-eso.yaml" --replace-argument="/cli"
 
-    #2. Install it via kubectl
-    kubectl create -f $eso_path
+    #2. Install it via kubectl (server-side apply: idempotent so a re-run of a
+    #   failed init updates the ESO ApplicationSet instead of failing on "already exists").
+    kubectl apply --server-side -f $eso_path
 }

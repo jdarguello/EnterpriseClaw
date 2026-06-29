@@ -30,6 +30,8 @@ def "gitops user repo" [
 ] {
     let main_path = abs-path --path="/gitops-config/main.yaml" --replace-argument=""
     if ($gitops_agent == "argocd") {
-        kubectl create -f $main_path
+        #server-side apply: idempotent so re-running a failed init re-applies the
+        #app-of-apps root instead of failing on "already exists".
+        kubectl apply --server-side -f $main_path
     }
 }
