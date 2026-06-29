@@ -16,4 +16,4 @@ resources:
 - agentgateway/            # agentgateway control plane, deployed in ns agentgateway-system, Istio-mesh-integrated.
 # agentgateway is a Gateway-API control plane (controller + xDS) that provisions L7 proxies from Gateway CRs.
 # Project decision: it runs as the Istio ambient L7 waypoint (values.yaml sets istio.autoEnabled: true) —
-# Istio stays the cluster's sole ingress gateway + mesh + Gateway-API CRD owner.
+# Istio stays the cluster's sole ingress gateway + mesh control plane; gateway-api-crds (wave -1) owns the CRDs.

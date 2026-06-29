@@ -5,7 +5,8 @@ metadata:
   namespace: argocd
   annotations:
     # agentgateway.dev CRDs first (AgentgatewayBackend/Parameters/Policy). NOTE: this chart does NOT
-    # ship the gateway.networking.k8s.io CRDs — Istio owns those, so there is no Gateway-API collision.
+    # ship the gateway.networking.k8s.io CRDs — those are installed by agents-gateway-api-crds (wave -1);
+    # see gitops/helm/agents/gateway-api-crds/. No Gateway-API CRD collision.
     argocd.argoproj.io/sync-wave: "0"
 spec:
   project: default

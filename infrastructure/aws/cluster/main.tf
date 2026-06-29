@@ -8,7 +8,7 @@ module "eks" {
   vpc_id                   = var.vpc_id
   subnet_ids               = var.private_subnet_ids
   control_plane_subnet_ids = var.private_subnet_ids
-  
+
   endpoint_public_access = true
   enable_irsa            = true
 
@@ -72,11 +72,11 @@ module "eks" {
 
   node_security_group_additional_rules = {
     ingress_istio_webhook = {
-      description                   = "Cluster API to Istiod Webhook"
-      protocol                      = "tcp"
-      from_port                     = 15017
-      to_port                       = 15017
-      type                          = "ingress"
+      description = "Cluster API to Istiod Webhook"
+      protocol    = "tcp"
+      from_port   = 15017
+      to_port     = 15017
+      type        = "ingress"
 
       source_cluster_security_group = true
     }
@@ -94,8 +94,8 @@ module "eks" {
 module "irsa_ebs_csi" {
   source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
 
-  name                   = "${var.cluster_name}-ebs-csi"
-  attach_ebs_csi_policy  = true
+  name                  = "${var.cluster_name}-ebs-csi"
+  attach_ebs_csi_policy = true
 
   oidc_providers = {
     ebs_csi_oidc = {
