@@ -59,3 +59,40 @@ def --env "main local kube-tools" [
 def "main local gitops" [] {
     gitops user repo --gitops-agent="argocd"
 }
+
+# Tear down the local deployment and return the VM to its bare (Argo-CD-only) state — the local
+# counterpart of `main destroy` (without tofu). It removes the Argo CD app-of-apps + every
+# ApplicationSet, the standalone gateway-api-crds app, the Gateway API CRDs, the local repo-creds
+# secret, and all workload namespaces. Built to survive a struggling/OOM control plane: it strips
+# Application finalizers (so deletes can't block on the app-controller) and never waits. Idempotent.
+def --env "main local destroy" [
+    --remote = "controlplane"
+] {
+    #1. Link the local cluster
+    main cluster connect --cloud-provider=local --remote=$remote
+
+    #2. Stop Argo from regenerating apps: delete every ApplicationSet
+    ^kubectl delete applicationset -n argocd --all --wait=false --ignore-not-found
+
+    #3. Strip finalizers from every Application (so deletion can't hang on the app-controller),
+    #   then delete them all (main, the generated children, gateway-api-crds, ...)
+    let apps = (^kubectl get applications -n argocd -o name | lines | where {|a| ($a | str trim) != ""})
+    for a in $apps {
+        ^kubectl patch ($a | str trim) -n argocd --type=merge -p '{"metadata":{"finalizers":null}}'
+    }
+    ^kubectl delete application -n argocd --all --wait=false --ignore-not-found
+
+    #4. Delete every workload namespace (frees memory immediately; pods are reaped by kubelet)
+    let keep = ["argocd" "cilium-secrets" "default" "kube-node-lease" "kube-public" "kube-system" "local-path-storage"]
+    let nss = (^kubectl get ns -o name | lines | each {|n| $n | str replace "namespace/" "" | str trim} | where {|n| ($n != "") and ($n not-in $keep)})
+    if (($nss | length) > 0) {
+        ^kubectl delete ns ...$nss --wait=false --ignore-not-found
+    }
+
+    #5. Remove the local-only extras: the Argo repo-creds secret + the Gateway API CRDs
+    ^kubectl delete secret git-creds -n argocd --ignore-not-found
+    let gw_crds = (^kubectl get crd -o name | lines | where {|c| $c =~ "gateway.networking.k8s.io"})
+    if (($gw_crds | length) > 0) {
+        ^kubectl delete ...$gw_crds --ignore-not-found
+    }
+}
