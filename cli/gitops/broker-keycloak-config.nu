@@ -78,9 +78,106 @@ def "broker-keycloak-config broker-cm" [
     }
 }
 
+# ---------------------------------------------------------------------------
+# Pure generators — ExternalSecrets that wire the Keycloak / Session-Broker
+# stack's secrets from AWS Secrets Manager into the cluster via External-Secrets.
+#
+# All four reference the same ClusterSecretStore (git-creds-secretstore) the rest
+# of the repo uses, and pull SPECIFIC JSON properties out of two SM entries:
+#   - keycloak-internal : the Keycloak/broker internal secrets (admin/db/client/realm)
+#   - google-idp        : the Google federated-IdP client credentials
+# The SM key names + namespaces are framework constants, so these defs take no
+# tenant args (the host values are the only tenant-resolved part of this overlay).
+# spec.data is used (NOT dataFrom) because we map named JSON properties → secretKeys.
+# ---------------------------------------------------------------------------
+
+# Keycloak bootstrap admin password (ns keycloak).
+def "broker-keycloak-config es-keycloak-admin" [] {
+    {
+        apiVersion: "external-secrets.io/v1beta1"
+        kind: "ExternalSecret"
+        metadata: { name: "keycloak-admin-secret", namespace: "keycloak" }
+        spec: {
+            refreshInterval: "1h"
+            secretStoreRef: { name: "git-creds-secretstore", kind: "ClusterSecretStore" }
+            target: { name: "keycloak-admin-secret", creationPolicy: "Owner" }
+            data: [
+                { secretKey: "admin-password", remoteRef: { key: "keycloak-internal", property: "admin-password" } }
+            ]
+        }
+    }
+}
+
+# Keycloak's PostgreSQL credentials (ns keycloak).
+def "broker-keycloak-config es-keycloak-postgresql" [] {
+    {
+        apiVersion: "external-secrets.io/v1beta1"
+        kind: "ExternalSecret"
+        metadata: { name: "keycloak-postgresql-secret", namespace: "keycloak" }
+        spec: {
+            refreshInterval: "1h"
+            secretStoreRef: { name: "git-creds-secretstore", kind: "ClusterSecretStore" }
+            target: { name: "keycloak-postgresql-secret", creationPolicy: "Owner" }
+            data: [
+                { secretKey: "password", remoteRef: { key: "keycloak-internal", property: "password" } }
+                { secretKey: "postgres-password", remoteRef: { key: "keycloak-internal", property: "postgres-password" } }
+            ]
+        }
+    }
+}
+
+# Realm-import secrets the keycloak-config-cli Job consumes (ns keycloak):
+# the OAuth client secrets, the seeded test user's password, and the Google IdP secret.
+# NOTE: SESSION_BROKER_CLIENT_SECRET sources keycloak-internal/session-broker-client-secret —
+# the SAME SM property the session-broker side reads, so the two sides AGREE on the client secret.
+def "broker-keycloak-config es-keycloak-realm" [] {
+    {
+        apiVersion: "external-secrets.io/v1beta1"
+        kind: "ExternalSecret"
+        metadata: { name: "keycloak-realm-secrets", namespace: "keycloak" }
+        spec: {
+            refreshInterval: "1h"
+            secretStoreRef: { name: "git-creds-secretstore", kind: "ClusterSecretStore" }
+            target: { name: "keycloak-realm-secrets", creationPolicy: "Owner" }
+            data: [
+                { secretKey: "SESSION_BROKER_CLIENT_SECRET", remoteRef: { key: "keycloak-internal", property: "session-broker-client-secret" } }
+                { secretKey: "KAGENT_CONTROLLER_CLIENT_SECRET", remoteRef: { key: "keycloak-internal", property: "kagent-controller-client-secret" } }
+                { secretKey: "ALICE_PASSWORD", remoteRef: { key: "keycloak-internal", property: "alice-password" } }
+                { secretKey: "GOOGLE_CLIENT_SECRET", remoteRef: { key: "google-idp", property: "CLIENT_SECRET" } }
+            ]
+        }
+    }
+}
+
+# The Session-Broker's view of the shared OAuth client secret (ns session-broker).
+# MUST source the SAME SM property as es-keycloak-realm's SESSION_BROKER_CLIENT_SECRET
+# (keycloak-internal/session-broker-client-secret) so the broker and Keycloak agree.
+def "broker-keycloak-config es-session-broker" [] {
+    {
+        apiVersion: "external-secrets.io/v1beta1"
+        kind: "ExternalSecret"
+        metadata: { name: "session-broker-secret", namespace: "session-broker" }
+        spec: {
+            refreshInterval: "1h"
+            secretStoreRef: { name: "git-creds-secretstore", kind: "ClusterSecretStore" }
+            target: { name: "session-broker-secret", creationPolicy: "Owner" }
+            data: [
+                { secretKey: "keycloak-client-secret", remoteRef: { key: "keycloak-internal", property: "session-broker-client-secret" } }
+            ]
+        }
+    }
+}
+
 # kustomization for the config/session-broker-keycloak/ directory.
 def "broker-keycloak-config kustomization" [] {
-    { resources: [ "keycloak-hostnames-cm.yaml" "broker-hostnames-cm.yaml" ] }
+    { resources: [
+        "keycloak-hostnames-cm.yaml"
+        "broker-hostnames-cm.yaml"
+        "external-secret-keycloak-admin.yaml"
+        "external-secret-keycloak-postgresql.yaml"
+        "external-secret-keycloak-realm.yaml"
+        "external-secret-session-broker.yaml"
+    ] }
 }
 
 # ---------------------------------------------------------------------------
@@ -106,6 +203,20 @@ def "broker-keycloak-config render" [
 
     (broker-keycloak-config broker-cm --issuer-url=$issuer_url --redirect-uri=$redirect_uri
     ) | to yaml | save $"($dir)/broker-hostnames-cm.yaml" --force
+
+    # ExternalSecrets — wire the Keycloak/broker stack's secrets from AWS Secrets Manager
+    # (these take no tenant args; the SM keys + namespaces are framework constants).
+    (broker-keycloak-config es-keycloak-admin
+    ) | to yaml | save $"($dir)/external-secret-keycloak-admin.yaml" --force
+
+    (broker-keycloak-config es-keycloak-postgresql
+    ) | to yaml | save $"($dir)/external-secret-keycloak-postgresql.yaml" --force
+
+    (broker-keycloak-config es-keycloak-realm
+    ) | to yaml | save $"($dir)/external-secret-keycloak-realm.yaml" --force
+
+    (broker-keycloak-config es-session-broker
+    ) | to yaml | save $"($dir)/external-secret-session-broker.yaml" --force
 
     (broker-keycloak-config kustomization) | to yaml | save $"($dir)/kustomization.yaml" --force
 }

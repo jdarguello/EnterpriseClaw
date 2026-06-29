@@ -8,13 +8,13 @@ module "network" {
 module "cluster" {
   source = "./cluster"
 
-  project               = var.project
-  cluster_name          = var.cluster_name
-  cluster_version       = var.cluster_version
-  node_instance_types   = var.node_instance_types
-  vpc_id                = module.network.vpc_id
-  public_subnet_ids     = module.network.public_subnet_ids
-  private_subnet_ids    = module.network.private_subnet_ids
+  project             = var.project
+  cluster_name        = var.cluster_name
+  cluster_version     = var.cluster_version
+  node_instance_types = var.node_instance_types
+  vpc_id              = module.network.vpc_id
+  public_subnet_ids   = module.network.public_subnet_ids
+  private_subnet_ids  = module.network.private_subnet_ids
 }
 
 module "pipe-storage" {
@@ -28,10 +28,10 @@ module "pipe-storage" {
 module "dns" {
   source = "./dns"
 
-  domain_name         = var.dns_data.domain_name
-  subdomains          = var.dns_data.subdomains
-  cluster_name        = var.cluster_name
-  oidc_provider_arn   = module.cluster.oidc_provider_arn
+  domain_name       = var.dns_data.domain_name
+  subdomains        = var.dns_data.subdomains
+  cluster_name      = var.cluster_name
+  oidc_provider_arn = module.cluster.oidc_provider_arn
 }
 
 resource "time_sleep" "wait_for_cluster" {
@@ -41,18 +41,18 @@ resource "time_sleep" "wait_for_cluster" {
 
 module "secrets-manager" {
   depends_on = [time_sleep.wait_for_cluster]
-  source = "./secrets-manager"
+  source     = "./secrets-manager"
 
-  cluster_name        = var.cluster_name
-  oidc_provider_arn   = module.cluster.oidc_provider_arn
-  secrets_registries  = var.secrets_registries
-  project             = var.project
+  cluster_name       = var.cluster_name
+  oidc_provider_arn  = module.cluster.oidc_provider_arn
+  secrets_registries = var.secrets_registries
+  project            = var.project
 }
 
 module "image-registries" {
   source = "./image-registries"
 
-  project               = var.project
-  cluster_name          = var.cluster_name
-  oidc_provider_arn     = module.cluster.oidc_provider_arn
+  project           = var.project
+  cluster_name      = var.cluster_name
+  oidc_provider_arn = module.cluster.oidc_provider_arn
 }

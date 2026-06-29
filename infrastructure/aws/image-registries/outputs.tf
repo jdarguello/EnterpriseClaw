@@ -1,6 +1,6 @@
 output "actions_registries_urls" {
   value = {
-    for ecr_registry in module.actions_registries:
+    for ecr_registry in module.actions_registries :
     ecr_registry.repository_name => ecr_registry.repository_url
   }
 }

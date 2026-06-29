@@ -28,18 +28,18 @@ variable "node_instance_types" {
 
 variable "dns_data" {
   description = "Data to DNS usage"
-  type        = object({
-    domain_name   = string
-    subdomains    = list(object({
-      name  = string
-      url   = string
+  type = object({
+    domain_name = string
+    subdomains = list(object({
+      name = string
+      url  = string
     }))
   })
 }
 
 variable "secrets_registries" {
-    description = "References of secrets registries in AWS Secrets Manager"
-    type        = list(object({
-        name = string
-    }))
+  description = "References of secrets registries in AWS Secrets Manager"
+  type = list(object({
+    name = string
+  }))
 }

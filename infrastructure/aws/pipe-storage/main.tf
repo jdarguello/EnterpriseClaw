@@ -14,7 +14,7 @@ module "pipeline-storage" {
   force_destroy = true
 
   tags = {
-    Project: var.project
+    Project : var.project
   }
 }
 
@@ -31,7 +31,7 @@ module "pipeline_storage_policy" {
   )
 
   tags = {
-    Project: var.project
+    Project : var.project
   }
 }
 

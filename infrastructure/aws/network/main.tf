@@ -3,8 +3,8 @@ data "aws_availability_zones" "available" {
 }
 
 locals {
-  azs             = slice(sort(data.aws_availability_zones.available.names), 0, min(3, length(data.aws_availability_zones.available.names)))
-  az_count        = length(local.azs)
+  azs               = slice(sort(data.aws_availability_zones.available.names), 0, min(3, length(data.aws_availability_zones.available.names)))
+  az_count          = length(local.azs)
   all_public_cidrs  = [for i in range(local.az_count) : cidrsubnet("10.0.0.0/16", 8, i + 1)]
   all_private_cidrs = [for i in range(local.az_count) : cidrsubnet("10.0.0.0/16", 8, i + 11)]
 }

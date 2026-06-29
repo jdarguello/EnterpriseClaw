@@ -2,7 +2,7 @@ locals {
   actions_files = fileset("../../", "actions/*/*.md")
 
   actions_names = [
-    for path in local.actions_files: 
+    for path in local.actions_files :
     split("/", dirname(path))[1]
   ]
 }
@@ -47,7 +47,7 @@ module "actions_registries" {
   })
 
   tags = {
-    OpenTofu    = "true"
-    Project     = var.project
+    OpenTofu = "true"
+    Project  = var.project
   }
 }

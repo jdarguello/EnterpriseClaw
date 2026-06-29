@@ -1,6 +1,6 @@
 locals {
   dns_records = [
-    for record_data in data.aws_route53_records.domain_records.resource_record_sets:
+    for record_data in data.aws_route53_records.domain_records.resource_record_sets :
     record_data.name
   ]
 }
@@ -25,7 +25,7 @@ module "acm" {
   validation_method = "DNS"
 
   subject_alternative_names = [
-    for subdomain in var.subdomains:
+    for subdomain in var.subdomains :
     subdomain.url
   ]
 
