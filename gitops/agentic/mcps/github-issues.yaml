@@ -9,12 +9,19 @@
 # allowed the issue capability. The agentgateway route in front (mcp-gateway/) requires the Keycloak
 # capability `issue:create` (client `issue-tracker`) — see mcp-gateway/policies.yaml.
 #
-# GitHub auth = a token from Secret `github-creds` (key GITHUB_PERSONAL_ACCESS_TOKEN), injected as
-# env via kmcp's secretRefs->envFrom. PER §2.2 the *user JWT stops at the gateway*; GitHub-side
-# identity is this bot/App token, and human attribution lives in the Workflow archive + agentgateway
-# trace. PREREQ: `github-creds` must exist in ns kagent (NOT committed — see mcps/README.md); until
-# it does, this pod stays NotReady (envFrom of a missing Secret) — the authz gating in front is
-# still fully testable because the gateway rejects/allows BEFORE contacting this upstream.
+# GitHub auth = GITHUB_PERSONAL_ACCESS_TOKEN injected as env via kmcp's secretRefs->envFrom.
+# Two secrets are envFrom'd into the pod:
+#   - `github-creds`        — carries the GitHub-App camelCase keys (githubAppID, githubAppPrivateKey,
+#                             etc.) used by Argo Events/Workflows. github-mcp-server ignores these
+#                             unrecognised keys.
+#   - `github-issues-token` — carries exactly GITHUB_PERSONAL_ACCESS_TOKEN, a short-lived App
+#                             installation token minted by the ESO GithubAccessToken generator
+#                             (generator-github-app-token.yaml + external-secret-github-issues-token.yaml).
+#                             Refreshed every 30m, well within the ~1h GitHub expiry.
+# PER §2.2 the *user JWT stops at the gateway*; GitHub-side identity is this bot/App token,
+# and human attribution lives in the Workflow archive + agentgateway trace.
+# PREREQ: both `github-creds` and `github-issues-token` must exist in ns kagent; ESO materializes
+# both automatically (no manual secret creation needed). Pod stays NotReady until both exist.
 apiVersion: kagent.dev/v1alpha1
 kind: MCPServer
 metadata:
@@ -31,7 +38,8 @@ spec:
     env:
       GITHUB_TOOLSETS: "issues"
     secretRefs:
-      - name: github-creds        # -> envFrom; must carry GITHUB_PERSONAL_ACCESS_TOKEN
+      - name: github-creds           # -> envFrom; GitHub-App camelCase keys (ignored by github-mcp-server)
+      - name: github-issues-token    # -> envFrom; GITHUB_PERSONAL_ACCESS_TOKEN (ESO-minted App installation token)
     resources:
       requests:
         cpu: "50m"

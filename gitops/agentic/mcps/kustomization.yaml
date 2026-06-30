@@ -8,17 +8,26 @@
 # has NO route there by design (no user JWT to validate — the read-only tool surface is the boundary).
 # The `agentic` ApplicationSet syncs this directory as the `agentic-mcps` Application.
 #
-# PREREQ: both in ns kagent, key GITHUB_PERSONAL_ACCESS_TOKEN — now materialized by ExternalSecrets
-# below (external-secret-github-creds.yaml, external-secret-github-readonly-creds.yaml). Each SM
-# secret must carry a GITHUB_PERSONAL_ACCESS_TOKEN field; see the ExternalSecret files for details.
-#   - `github-creds`          (read/write) — github-issues + infra-provisioning envFrom it
-#   - `github-readonly-creds` (READ-scoped) — github-readonly envFrom it; defines the anonymous blast
-#     radius, so scope it to public/specific repos only.
+# Token materialization strategy (GITHUB_PERSONAL_ACCESS_TOKEN):
+#   - `github-issues-token`   (DYNAMIC, ESO GithubAccessToken generator) — github-issues envFrom it;
+#                              mints a short-lived GitHub App installation token refreshed every 30m.
+#                              Source: generator-github-app-token.yaml + external-secret-github-issues-token.yaml.
+#                              `github-creds` is ALSO envFrom'd alongside it (for App camelCase keys
+#                              used by Argo Events/Workflows) but github-mcp-server reads ONLY the
+#                              recognised GITHUB_PERSONAL_ACCESS_TOKEN from github-issues-token.
+#   - `github-creds`          (static extract from SM `github-creds`) — github-issues + infra-provisioning
+#                              envFrom it. Does NOT carry GITHUB_PERSONAL_ACCESS_TOKEN for github-mcp-server
+#                              (the token comes from github-issues-token for github-issues; infra-provisioning
+#                              will need the same treatment — out of scope for this change).
+#   - `github-readonly-creds` (READ-scoped PAT from SM `github-readonly-token`) — github-readonly envFrom it;
+#                              defines the anonymous blast radius, scoped to read-only repos only.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: kagent          # kagent controller WATCH_NAMESPACES=kagent — CRs MUST live here
 resources:
+  - generator-github-app-token.yaml
   - external-secret-github-creds.yaml
+  - external-secret-github-issues-token.yaml
   - external-secret-github-readonly-creds.yaml
   - github-issues.yaml
   - infra-provisioning.yaml

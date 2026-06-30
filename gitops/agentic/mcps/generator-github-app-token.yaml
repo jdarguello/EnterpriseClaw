@@ -1,0 +1,57 @@
+# GithubAccessToken generator: github-app-token in ns kagent
+#
+# Mints a short-lived GitHub App *installation token* (valid ~1h) and auto-refreshes it via
+# External-Secrets Operator's GithubAccessToken generator. The consuming ExternalSecret
+# (external-secret-github-issues-token.yaml) refreshes every 30m — safely within the 1h window.
+#
+# Why a generator instead of a static PAT:
+#   The `github-creds` SM secret carries GitHub-App credentials in camelCase
+#   (githubAppID, githubAppPrivateKey, etc.) that github-mcp-server does NOT recognise — it only
+#   reads GITHUB_PERSONAL_ACCESS_TOKEN. The App private key never changes, but installation tokens
+#   do expire, so they MUST be minted dynamically. ESO's GithubAccessToken generator is the
+#   purpose-built solution: it calls the GitHub API to exchange the App private key for a fresh
+#   installation token without ever storing it long-term.
+#
+# Chicken-and-egg avoidance:
+#   The generator reads the private key from the k8s Secret `github-creds`, which is itself
+#   materialized by `external-secret-github-creds.yaml` (a ClusterSecretStore→SM extract).
+#   The OUTPUT goes to a SEPARATE secret (`github-issues-token`) so there is no cycle.
+#
+# Least-privilege scope:
+#   Pinned to repository `EnterpriseClaw-Sandbox` and permission `issues: write`
+#   (write implies read — covers list/search/read/create). No PR or repo-admin tools are
+#   exposed through this token; those belong to the infra-provisioning MCP's scope.
+#
+# SANDBOX NOTE — parameterize before OSS release:
+#   `appID` and `installID` are inlined sandbox identifiers (not secrets, but env-specific).
+#   Per the public/private repo split in CLAUDE.md §1.3, these values belong in the private
+#   repo overlay (or CLI-generated patch) rather than in this public framework file. For now
+#   they are inlined here for the ArgoCon sandbox; replace with Kustomize patches or a
+#   CLI-generated ConfigMap/Secret injection before multi-tenant use.
+#
+# Refresh requirement:
+#   The ESO GithubAccessToken spec mandates the consuming ExternalSecret's refreshInterval
+#   be strictly less than 60 minutes (GitHub installation tokens expire at ~60m). The
+#   ExternalSecret that consumes this generator uses `refreshInterval: "30m"`.
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: github-app-token
+  namespace: kagent
+spec:
+  # Non-secret GitHub App identifiers — inlined sandbox values; parameterize for OSS release.
+  appID: "3799768"
+  installID: "138693902"
+  # Least-privilege: single repo, issues write (implies read) only.
+  repositories:
+    - EnterpriseClaw-Sandbox
+  permissions:
+    issues: write
+  auth:
+    privateKey:
+      secretRef:
+        # `github-creds` is materialized by external-secret-github-creds.yaml from SM `github-creds`.
+        # It must exist before this generator is reconciled; ESO retries automatically if it is
+        # temporarily absent (e.g. initial sync ordering).
+        name: github-creds
+        key: githubAppPrivateKey
