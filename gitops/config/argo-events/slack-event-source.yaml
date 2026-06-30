@@ -30,8 +30,11 @@ spec:
         endpoint: /slack
         port: "12001"
         method: POST
-      # Bot User OAuth token (xoxb-…) — used by the agent later for conversations.replies /
-      # chat.postMessage; the EventSource holds it so token + signingSecret live in one secret.
+      # Slack VERIFICATION TOKEN (legacy) — NOT the bot xoxb- token. Argo Events compares the
+      # inbound payload's `token` field against this (start.go OptionVerifyToken); a mismatch is a
+      # 500 "invalid verification token" and the url_verification challenge fails. Get it from the
+      # Slack app: Basic Information → App Credentials → Verification Token. (The bot xoxb- token is
+      # a SEPARATE credential the agent/reply path will consume later — not used by the EventSource.)
       token:
         name: slack-secret
         key: token
