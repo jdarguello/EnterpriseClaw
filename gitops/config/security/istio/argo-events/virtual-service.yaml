@@ -9,6 +9,18 @@ spec:
   gateways:
     - istio-ingress/argo-events-gateway    # <ns>/<name>
   http:
+    # Slack Events API → slack EventSource. Listed FIRST so /slack wins over the catch-all below.
+    # The ALB only forwards /payload and /slack to this gateway (see cli .../patches.nu); Istio
+    # does the final path split here. No rewrite — the eventsource's webhook.endpoint is /slack.
+    - match:
+        - uri:
+            prefix: /slack
+      route:
+        - destination:
+            host: slack-eventsource-svc.argo-events.svc.cluster.local
+            port:
+              number: 12001
+    # github push webhook (endpoint /payload) → github EventSource. Catch-all, evaluated last.
     - match:
         - uri:
             prefix: /

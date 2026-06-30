@@ -1,0 +1,42 @@
+# Slack EventSource — the inbound door for the ArgoCon demo's "Golden Path via chat".
+#
+# Slack delivers events over the Events API (HTTP), NOT Socket Mode: it POSTs to a public
+# Request URL. Ours is  https://events.<domain>/slack  — same host/ALB as the github webhook,
+# distinguished by the /slack path (ALB rule + Istio VirtualService route → slack-eventsource-svc).
+#
+# This EventSource:
+#   - answers Slack's url_verification challenge automatically (so the Request URL verifies),
+#   - verifies every request's X-Slack-Signature using `signingSecret`,
+#   - publishes message events onto the NATS EventBus for a Sensor to pick up (Sensor is the
+#     NEXT step — not needed for URL registration).
+#
+# Secret `slack-secret` (token + signingSecret) is materialized by slack-external-secret.yaml
+# from AWS Secrets Manager. Both must exist before the challenge round-trips.
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: slack
+  namespace: argo-events
+spec:
+  service:
+    ports:
+      - name: slack-events
+        port: 12001
+        targetPort: 12001
+  slack:
+    chat:
+      webhook:
+        # Slack's Request URL path. Kept distinct from github's /payload so both ride one ALB.
+        endpoint: /slack
+        port: "12001"
+        method: POST
+      # Bot User OAuth token (xoxb-…) — used by the agent later for conversations.replies /
+      # chat.postMessage; the EventSource holds it so token + signingSecret live in one secret.
+      token:
+        name: slack-secret
+        key: token
+      # Slack Signing Secret — the EventSource validates X-Slack-Signature on every request,
+      # including the url_verification challenge. A wrong/missing value fails verification.
+      signingSecret:
+        name: slack-secret
+        key: signingSecret

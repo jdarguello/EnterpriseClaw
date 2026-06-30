@@ -40,7 +40,8 @@ def --env "cluster aws setup tfvars" [
             {"name": $env.github_app_registry},
             {"name": $env.github_webhook_registry},
             {"name": "google-idp"},
-            {"name": "github-readonly-token"}
+            {"name": "github-readonly-token"},
+            {"name": "slack-creds"}
         ]
     } | save env.auto.tfvars.json --force
 }

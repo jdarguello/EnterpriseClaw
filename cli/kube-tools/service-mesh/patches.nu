@@ -60,10 +60,13 @@ def --env "istio components patch ingress" [
     let path = $"gitops-config/config/istio/($kubetool)/ingress-patch.yaml"
     let abs_path = abs-path --path=$path --replace-argument=""
 
-    #1. Ajuste del path
-    mut backend_path = "/"
+    #1. Ajuste del path. argo-events exposes TWO endpoints on the shared ALB:
+    #   /payload -> github push webhook, /slack -> Slack Events API. Both forward to the Istio
+    #   ingress gateway, whose VirtualService does the final split to the right eventsource
+    #   service. /payload stays first (a unit test asserts paths.0.path == "/payload").
+    mut backend_paths = ["/"]
     if ($kubetool == "argo-events") {
-        $backend_path = "/payload"
+        $backend_paths = ["/payload", "/slack"]
     }
 
     #2. Ingress-name
@@ -89,8 +92,8 @@ def --env "istio components patch ingress" [
             rules: [{
                 host: $hostname
                 http: {
-                    paths: [{
-                        path: $backend_path
+                    paths: ($backend_paths | each {|p| {
+                        path: $p
                         pathType: "Prefix"
                         backend: {
                             service: {
@@ -100,7 +103,7 @@ def --env "istio components patch ingress" [
                                 }
                             }
                         }
-                    }]
+                    }})
                 }
             }]
         }
