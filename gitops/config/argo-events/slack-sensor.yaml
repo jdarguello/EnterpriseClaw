@@ -57,7 +57,7 @@ spec:
                 namespace: argo
               spec:
                 serviceAccountName: pipe-storage
-                entrypoint: echo-event
+                entrypoint: main
                 ttlStrategy:
                   secondsAfterCompletion: 600
                 # These five fields are exactly what the downstream steps consume:
@@ -72,6 +72,28 @@ spec:
                     - name: ts
                     - name: thread_ts
                 templates:
+                  # DAG: echo the parsed fields (audit/debug) and post a reply into the Slack thread.
+                  # Independent tasks so a log hiccup can't block the actual reply.
+                  - name: main
+                    dag:
+                      tasks:
+                        - name: log
+                          template: echo-event
+                          arguments:
+                            parameters:
+                              - { name: text, value: "{{workflow.parameters.text}}" }
+                              - { name: user, value: "{{workflow.parameters.user}}" }
+                              - { name: channel, value: "{{workflow.parameters.channel}}" }
+                              - { name: ts, value: "{{workflow.parameters.ts}}" }
+                              - { name: thread_ts, value: "{{workflow.parameters.thread_ts}}" }
+                        - name: reply
+                          template: slack-reply
+                          arguments:
+                            parameters:
+                              - { name: text, value: "{{workflow.parameters.text}}" }
+                              - { name: channel, value: "{{workflow.parameters.channel}}" }
+                              - { name: ts, value: "{{workflow.parameters.ts}}" }
+                              - { name: thread_ts, value: "{{workflow.parameters.thread_ts}}" }
                   - name: echo-event
                     inputs:
                       parameters:
@@ -103,6 +125,58 @@ spec:
                           value: "{{inputs.parameters.ts}}"
                         - name: SLACK_THREAD_TS
                           value: "{{inputs.parameters.thread_ts}}"
+                  # Reply step — the canonical logic lives in the `main slack reply` CLI command;
+                  # this inline Python mirrors it (json.dumps = safe escaping of arbitrary user text)
+                  # because there is no enterpriseclaw workflow image yet. Bot token mounted from the
+                  # slack-bot ExternalSecret (ns argo); threads under thread_ts, else the message ts.
+                  - name: slack-reply
+                    inputs:
+                      parameters:
+                        - name: text
+                        - name: channel
+                        - name: ts
+                        - name: thread_ts
+                    container:
+                      image: public.ecr.aws/docker/library/python:3.12-slim
+                      command: [python3, -c]
+                      args:
+                        - |
+                          import json, os, re, urllib.request
+                          token = os.environ["SLACK_BOT_TOKEN"]
+                          channel = os.environ["SLACK_CHANNEL"]
+                          ts = os.environ.get("SLACK_TS", "")
+                          thread = os.environ.get("SLACK_THREAD_TS", "") or ts
+                          raw = os.environ.get("USER_TEXT", "")
+                          clean = re.sub(r"^\s*<@[^>]+>\s*", "", raw).strip() or "(empty)"
+                          reply = ":wave: On it! I received your request:\n> %s\n\nThe EnterpriseClaw GitOps pipeline picked it up - agent reasoning + PR are next." % clean
+                          body = {"channel": channel, "text": reply}
+                          if thread:
+                              body["thread_ts"] = thread
+                          req = urllib.request.Request(
+                              "https://slack.com/api/chat.postMessage",
+                              data=json.dumps(body).encode(),
+                              headers={"Authorization": "Bearer " + token,
+                                       "Content-Type": "application/json; charset=utf-8"},
+                              method="POST")
+                          with urllib.request.urlopen(req, timeout=15) as r:
+                              resp = json.load(r)
+                          print("chat.postMessage ok=%s error=%s ts=%s" % (resp.get("ok"), resp.get("error"), resp.get("ts")))
+                          if not resp.get("ok"):
+                              raise SystemExit("reply failed: " + str(resp.get("error")))
+                      env:
+                        - name: SLACK_BOT_TOKEN
+                          valueFrom:
+                            secretKeyRef:
+                              name: slack-bot
+                              key: botToken
+                        - name: SLACK_CHANNEL
+                          value: "{{inputs.parameters.channel}}"
+                        - name: SLACK_TS
+                          value: "{{inputs.parameters.ts}}"
+                        - name: SLACK_THREAD_TS
+                          value: "{{inputs.parameters.thread_ts}}"
+                        - name: USER_TEXT
+                          value: "{{inputs.parameters.text}}"
           # gjson paths into the dispatched inner event (NO `body` wrapper for the Slack source).
           # thread_ts carries a `value:` default so an empty/absent thread (top-level mention) can't
           # fail param resolution and wedge the trigger.

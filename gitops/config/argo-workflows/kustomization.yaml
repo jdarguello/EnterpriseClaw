@@ -5,3 +5,4 @@ resources:
 - rolebinding.yaml
 - sa-pipe.yaml
 - sa-inner.yaml
+- slack-bot-externalsecret.yaml
