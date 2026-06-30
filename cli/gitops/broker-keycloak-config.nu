@@ -168,13 +168,20 @@ def "broker-keycloak-config es-session-broker" [] {
     }
 }
 
-# Redis (Session-Broker cache) auth secret (ns redis): the broker repo's redis chart
-# sets auth.existingSecret=redis-secret / existingSecretPasswordKey=redis-password.
-def "broker-keycloak-config es-redis" [] {
+# Redis (Session-Broker cache) auth secret. The SAME redis-password (SM
+# keycloak-internal/redis-password) is needed in TWO namespaces, so this is
+# rendered once per namespace (both sourcing the one SM property, so they agree):
+#   - ns redis          : the broker repo's redis chart's auth.existingSecret
+#                         (existingSecretPasswordKey=redis-password) for the server.
+#   - ns session-broker : the Dapr `redis` state-store Component resolves its
+#                         secretKeyRef in ITS OWN namespace, so daprd needs
+#                         redis-secret here too — without it the sidecar fails
+#                         component load fatally and crashloops.
+def "broker-keycloak-config es-redis" [--namespace = "redis"] {
     {
         apiVersion: "external-secrets.io/v1beta1"
         kind: "ExternalSecret"
-        metadata: { name: "redis-secret", namespace: "redis" }
+        metadata: { name: "redis-secret", namespace: $namespace }
         spec: {
             refreshInterval: "1h"
             secretStoreRef: { name: "git-creds-secretstore", kind: "ClusterSecretStore" }
@@ -196,6 +203,7 @@ def "broker-keycloak-config kustomization" [] {
         "external-secret-keycloak-realm.yaml"
         "external-secret-session-broker.yaml"
         "external-secret-redis.yaml"
+        "external-secret-redis-broker.yaml"
     ] }
 }
 
@@ -239,6 +247,10 @@ def "broker-keycloak-config render" [
 
     (broker-keycloak-config es-redis
     ) | to yaml | save $"($dir)/external-secret-redis.yaml" --force
+
+    # Same redis-password, second copy in ns session-broker for the Dapr Component.
+    (broker-keycloak-config es-redis --namespace=session-broker
+    ) | to yaml | save $"($dir)/external-secret-redis-broker.yaml" --force
 
     (broker-keycloak-config kustomization) | to yaml | save $"($dir)/kustomization.yaml" --force
 }

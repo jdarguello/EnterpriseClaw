@@ -50,7 +50,8 @@ def "broker-keycloak-config-tests" [] {
             assert equal ($br.data.KEYCLOAK_REDIRECT_URI) "https://broker.enterprise-claw.io/auth/callback"
 
             let k = (open $"($dir)/kustomization.yaml")
-            # the overlay now spans the two hostname CMs PLUS the five ExternalSecrets
+            # the overlay now spans the two hostname CMs PLUS the six ExternalSecrets
+            # (redis is rendered into both ns redis and ns session-broker)
             assert equal $k.resources [
                 "keycloak-hostnames-cm.yaml"
                 "broker-hostnames-cm.yaml"
@@ -59,6 +60,7 @@ def "broker-keycloak-config-tests" [] {
                 "external-secret-keycloak-realm.yaml"
                 "external-secret-session-broker.yaml"
                 "external-secret-redis.yaml"
+                "external-secret-redis-broker.yaml"
             ]
             cd $cwd
             rm -rf $tmp
@@ -178,8 +180,18 @@ def "broker-keycloak-config-tests" [] {
             assert equal $d.remoteRef.property "redis-password"
         }}
 
-        # ---- kustomization now lists all seven resources (2 CMs + 5 ExternalSecrets) ----
-        { name: "kustomization lists both ConfigMaps and all five ExternalSecrets", run: {||
+        # ---- the same redis-password is also rendered into ns session-broker for Dapr ----
+        { name: "es-redis --namespace=session-broker targets the broker ns from the same SM property", run: {||
+            let es = (broker-keycloak-config es-redis --namespace=session-broker)
+            assert equal $es.metadata.name "redis-secret"
+            assert equal $es.metadata.namespace "session-broker"
+            let d = ($es.spec.data | get 0)
+            assert equal $d.secretKey "redis-password"
+            assert equal $d.remoteRef.property "redis-password"
+        }}
+
+        # ---- kustomization now lists all eight resources (2 CMs + 6 ExternalSecrets) ----
+        { name: "kustomization lists both ConfigMaps and all six ExternalSecrets", run: {||
             let k = (broker-keycloak-config kustomization)
             assert equal $k.resources [
                 "keycloak-hostnames-cm.yaml"
@@ -189,11 +201,12 @@ def "broker-keycloak-config-tests" [] {
                 "external-secret-keycloak-realm.yaml"
                 "external-secret-session-broker.yaml"
                 "external-secret-redis.yaml"
+                "external-secret-redis-broker.yaml"
             ]
         }}
 
-        # ---- render writes the four ExternalSecret files alongside the CMs ----
-        { name: "render writes all four ExternalSecret YAMLs into the overlay dir", run: {||
+        # ---- render writes the ExternalSecret files alongside the CMs ----
+        { name: "render writes all ExternalSecret YAMLs into the overlay dir", run: {||
             let tmp = (make-tmpdir "kc-es")
             mkdir $"($tmp)/gitops-config"
             let cwd = (pwd)
@@ -210,9 +223,14 @@ def "broker-keycloak-config-tests" [] {
             let bd = ($broker.spec.data | get 0)
             assert equal $bd.remoteRef.property "session-broker-client-secret"
 
+            # redis-secret is also rendered into ns session-broker (for the Dapr Component)
+            let redisBroker = (open $"($dir)/external-secret-redis-broker.yaml")
+            assert equal $redisBroker.metadata.namespace "session-broker"
+            assert equal $redisBroker.metadata.name "redis-secret"
+
             # kustomization on disk matches the generator
             let k = (open $"($dir)/kustomization.yaml")
-            assert equal ($k.resources | length) 7
+            assert equal ($k.resources | length) 8
             cd $cwd
             rm -rf $tmp
         }}
