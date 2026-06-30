@@ -7,6 +7,7 @@ source ../gitops/app-of-apps.nu
 source ../gitops/broker-exposure.nu
 source ../gitops/kagent-exposure.nu
 source ../gitops/broker-keycloak-config.nu
+source ../gitops/bedrock-irsa.nu
 
 def "main kube-tools bootstrap" [
     --git-provider: string
@@ -35,6 +36,10 @@ def "main kube-tools bootstrap" [
     let broker_domain = ($env.domain_name | str trim -c '"')
     app-of-apps register-agents
     app-of-apps register-session-broker
+    # Inject the tenant's Bedrock IRSA role ARN (live infra output `bedrock_irsa_arn`) onto the
+    # agentgateway LLM-gateway proxy SA, via a CLI-generated AgentgatewayParameters object delivered
+    # through the private repo (the public agentic tree stays ARN-free). See cli/gitops/bedrock-irsa.nu.
+    bedrock-irsa render --cloud-provider=$cloud_provider
     broker-exposure render --domain=$broker_domain --subnets=$broker_subnets
     # Expose the kagent dashboard UI (ai-platform.<domain>) on the same shared platform ALB.
     kagent-exposure render --domain=$broker_domain --subnets=$broker_subnets

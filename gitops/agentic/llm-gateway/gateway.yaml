@@ -4,11 +4,24 @@
 # provision a data-plane proxy (Deployment + Service named after this Gateway: `agentic-gw`).
 # kagent's ModelConfig points at this proxy's Service (agentic-gw.kagent:8080) instead of at
 # Bedrock directly, so every LLM call traverses the gateway — which holds the Bedrock identity
-# and signs SigV4 (backend.yaml).
+# and signs SigV4 via IRSA (backend.yaml).
 #
 # Co-located in `kagent` (mesh-less, mirroring the proven dry-run waypoint) so no cross-namespace
 # ReferenceGrant is needed and the proxy comes Ready without istio.autoEnabled meshing it. The
 # production waypoint is the ambient one in `agentgateway-system`; that hardening is a follow-up.
+#
+# IRSA wiring — spec.infrastructure.parametersRef:
+#   This Gateway opts into the `AgentgatewayParameters` named `agentic-gw-params` (ns `kagent`).
+#   That object is NOT shipped in this public repo — it is GENERATED AND OWNED BY THE CLI
+#   (`cli/gitops/app-of-apps.nu` / `bootstrap.nu`) from the live `bedrock_irsa_arn` tofu output.
+#   It sets two things on the controller-managed proxy ServiceAccount (`kagent:agentic-gw`):
+#     1. `metadata.annotations["eks.amazonaws.com/role-arn"]` = the Bedrock IRSA role ARN
+#        (tenant-specific; CLI injects from `tofu output bedrock_irsa_arn`)
+#     2. `spec.automountServiceAccountToken: true` (overrides the controller default of false,
+#        allowing the EKS IRSA mutating webhook to project the web-identity token volume)
+#   If `agentic-gw-params` does not exist when the Gateway is reconciled, the controller falls
+#   back to defaults (no IRSA, no automount) — the proxy starts but SigV4 signing fails.
+#   The CLI task MUST create `agentic-gw-params` before the proxy pod starts.
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -16,6 +29,13 @@ metadata:
   namespace: kagent
 spec:
   gatewayClassName: agentgateway
+  infrastructure:
+    parametersRef:
+      group: agentgateway.dev
+      kind: AgentgatewayParameters
+      name: agentic-gw-params
+      # Gateway-API spec.infrastructure.parametersRef has no `namespace` field (group/kind/name
+      # only) — the ref is implicitly same-namespace, so `agentic-gw-params` must be in `kagent`.
   listeners:
     - name: http
       port: 8080

@@ -4,13 +4,32 @@
 #
 # Shape verified against the installed agentgateway 1.3.1 CRD (`kubectl explain`):
 #   - spec.ai.provider.bedrock {model, region, guardrail}  (singular `provider` form)
-#   - spec.policies.auth.aws.secretRef                     (the no-IRSA credential path)
+#   - spec.policies.auth.aws                               (the SigV4 credential path)
 #
-# AUTH on a LOCAL (non-EKS) cluster: there is no IRSA, so credentials come from a Kubernetes
-# Secret named `bedrock-aws-creds` with keys `accessKey` / `secretKey` (+ optional `sessionToken`).
-# That Secret holds REAL AWS credentials, so it is NOT committed to this public repo — create it
-# out-of-band on the cluster (see gitops/agentic/README implications). In production this whole
-# block is replaced by IRSA on the agentgateway ServiceAccount (omit `policies.auth` entirely).
+# CREDENTIAL PATH — IRSA (production / EKS):
+#   The `spec.policies.auth` block is OMITTED entirely, which causes the Bedrock AI provider to
+#   resolve AWS credentials through the AWS SDK default chain — specifically the web-identity token
+#   file projected onto the proxy pod by the EKS IRSA mutating webhook. The agentgateway proxy's
+#   ServiceAccount (`kagent:agentic-gw`, controller-managed) is annotated with the Bedrock IRSA
+#   role ARN by the CLI via an AgentgatewayParameters object (`agentic-gw-params` in `kagent`),
+#   and that object enables `automountServiceAccountToken: true` so the webhook actually injects
+#   the projected volume. The SA annotation + automount must both be in place before the proxy pod
+#   starts, or SigV4 signing silently falls through to no-credentials (and InvokeModel returns 403).
+#
+#   NOTE: if the 1.3.1 CRD requires an *explicit* `aws: {}` marker (no secretRef) to engage SigV4
+#   rather than plain HTTP when `policies.auth` is omitted, add `policies: { auth: { aws: {} } }`
+#   and remove this note. Needs live `kubectl explain agentgatewaybackend.spec.policies.auth.aws`
+#   confirmation. The commented-out form is intentionally left out here; the SDK-chain path (block
+#   omitted) is the expected production shape per the agentgateway upstream documentation.
+#
+# LOCAL / NON-EKS fallback (dry-run only — do NOT commit):
+#   Restore `spec.policies.auth.aws.secretRef: {name: bedrock-aws-creds}` out-of-band on the
+#   cluster. That Secret holds real AWS credentials and must never be committed to this public repo.
+#
+# Two separate identity rails (CLAUDE.md §2.2):
+#   - LLM hop  : authenticated by WORKLOAD identity — the proxy SA's Bedrock IRSA role (SigV4).
+#   - MCP/A2A  : authenticated by USER identity — the Keycloak JWT forwarded from the caller.
+#   Guardrails enforce at the Bedrock InvokeModel call, not at the agentgateway prompt layer.
 apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayBackend
 metadata:
@@ -24,8 +43,7 @@ spec:
         # account's enabled Bedrock inference profile (see modelconfig.yaml note).
         model: us.anthropic.claude-haiku-4-5-20251001-v1:0
         region: us-east-1
-  policies:
-    auth:
-      aws:
-        secretRef:
-          name: bedrock-aws-creds      # keys: accessKey, secretKey [, sessionToken] — created out-of-band
+  # NO spec.policies.auth block — IRSA via the AWS SDK default credential chain (web-identity
+  # token projected by the EKS webhook onto the kagent:agentic-gw ServiceAccount). The CLI
+  # delivers the AgentgatewayParameters object (`agentic-gw-params`) that annotates the SA
+  # with the Bedrock IRSA role ARN and enables automountServiceAccountToken so the webhook fires.

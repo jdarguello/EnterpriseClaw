@@ -49,9 +49,48 @@ def "local secret argocd-repo" [] {
     local secret from-sm --secret-id="github-creds" --name="git-creds" --namespace="argocd" --label="argocd.argoproj.io/secret-type=repo-creds" --extra={type: "git"}
 }
 
-# Create the SM-backed secrets the local cluster needs. For now just the argocd repo-creds (required
-# BEFORE the app-of-apps root syncs, so Argo can read the private repo). Runtime secrets for
-# argo / argo-events / kagent are layered in once their namespaces exist (next iteration).
+# Bedrock access for the LOCAL VM — the static-Secret substitute for IRSA.
+#
+# In the cloud flow the agentgateway LLM-gateway proxy SA assumes the Bedrock IRSA role (the ARN the
+# CLI injects via cli/gitops/bedrock-irsa.nu -> the `agentic-gw-params` AgentgatewayParameters). The
+# local VM has NO IRSA (no OIDC provider, no web-identity token volume), so that annotation is inert
+# there. Instead the agentgateway Bedrock backend reads STATIC AWS creds from a cluster Secret
+# (`kagent/bedrock-aws-creds`), populated from a dedicated least-priv IAM user's keys. Those keys are
+# NOT the .env terraform_user (which has no Bedrock perms — see the bedrock-local-creds memory), so
+# they are read from their own env vars (EC_BEDROCK_ACCESS_KEY_ID / EC_BEDROCK_SECRET_ACCESS_KEY) and
+# only created when present. Secret VALUES are never printed.
+def "local secret bedrock" [
+    --name      = "bedrock-aws-creds"
+    --namespace = "kagent"
+] {
+    let key_id = ($env.EC_BEDROCK_ACCESS_KEY_ID? | default "")
+    let secret = ($env.EC_BEDROCK_SECRET_ACCESS_KEY? | default "")
+    if (($key_id | is-empty) or ($secret | is-empty)) {
+        # Intentionally deferred when the Bedrock creds are not provided: the local cluster can still
+        # come up; the LLM hop just won't authenticate until the operator exports the two env vars and
+        # re-runs `main local secrets`. (No cloud IRSA path exists on the VM by design.)
+        print "local secret bedrock: EC_BEDROCK_ACCESS_KEY_ID / EC_BEDROCK_SECRET_ACCESS_KEY not set — skipping bedrock-aws-creds (deferred)."
+        return
+    }
+    let region = ($env.region | str trim -c '"')
+    {
+        apiVersion: "v1"
+        kind: "Secret"
+        metadata: { name: $name, namespace: $namespace }
+        type: "Opaque"
+        stringData: {
+            AWS_ACCESS_KEY_ID: $key_id
+            AWS_SECRET_ACCESS_KEY: $secret
+            AWS_REGION: $region
+        }
+    } | to yaml | ^kubectl apply -f -
+}
+
+# Create the SM-backed secrets the local cluster needs. For now the argocd repo-creds (required
+# BEFORE the app-of-apps root syncs, so Argo can read the private repo) + the static Bedrock creds
+# (the IRSA substitute for the LLM gateway). Runtime secrets for argo / argo-events are layered in
+# once their namespaces exist (next iteration).
 def "main local secrets" [] {
     local secret argocd-repo
+    local secret bedrock
 }
