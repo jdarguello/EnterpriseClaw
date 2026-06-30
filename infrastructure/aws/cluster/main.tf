@@ -80,6 +80,22 @@ module "eks" {
 
       source_cluster_security_group = true
     }
+
+    # The Dapr sidecar-injector serves its mutating admission webhook on pod
+    # port 4000. EKS only auto-allows the control plane to nodes on a fixed set
+    # of webhook ports (443/4443/6443/8443/9443/10250/10251) plus the Istio rule
+    # above; 4000 is not among them, so the API server's webhook call times out
+    # and (failurePolicy: Ignore) pods come up with NO daprd sidecar, silently.
+    # Allow the cluster (control-plane) security group to reach nodes on 4000.
+    ingress_dapr_injector_webhook = {
+      description = "Cluster API to Dapr sidecar-injector Webhook"
+      protocol    = "tcp"
+      from_port   = 4000
+      to_port     = 4000
+      type        = "ingress"
+
+      source_cluster_security_group = true
+    }
   }
 
   tags = {
