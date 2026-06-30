@@ -7,6 +7,11 @@ metadata:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/ssl-redirect: "443"
     alb.ingress.kubernetes.io/target-type: ip
+    # Health-check Istio's status port (404 on bare `/` else marks targets unhealthy → 503).
+    # See CLAUDE.md §6.
+    alb.ingress.kubernetes.io/healthcheck-port: "15021"
+    alb.ingress.kubernetes.io/healthcheck-path: /healthz/ready
+    alb.ingress.kubernetes.io/success-codes: "200"
   finalizers:
   - ingress.k8s.aws/resources
   name: argo-cd-istio-ingress

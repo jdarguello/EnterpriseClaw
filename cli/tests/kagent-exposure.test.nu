@@ -44,6 +44,10 @@ def "kagent-exposure-tests" [] {
             assert equal ($ing.metadata.annotations | get "alb.ingress.kubernetes.io/group.name") "enterpriseclaw"
             assert equal ($ing.metadata.annotations | get "alb.ingress.kubernetes.io/subnets") "subnet-a,subnet-b"
             assert equal ($ing.metadata.annotations | get "external-dns.alpha.kubernetes.io/hostname") "ai-platform.example.io"
+            # health-check Istio's status port, else the ALB 404s on `/` and 503s every route
+            assert equal ($ing.metadata.annotations | get "alb.ingress.kubernetes.io/healthcheck-port") "15021"
+            assert equal ($ing.metadata.annotations | get "alb.ingress.kubernetes.io/healthcheck-path") "/healthz/ready"
+            assert equal ($ing.metadata.annotations | get "alb.ingress.kubernetes.io/success-codes") "200"
             # ui host -> all paths to the istio-ingress service
             assert equal ($ing.spec.rules.0.host) "ai-platform.example.io"
             assert equal ($ing.spec.rules.0.http.paths.0.path) "/"

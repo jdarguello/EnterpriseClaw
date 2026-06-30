@@ -47,6 +47,10 @@ def "broker-exposure-tests" [] {
             assert equal ($ing.metadata.annotations | get "alb.ingress.kubernetes.io/group.name") "enterpriseclaw"
             assert equal ($ing.metadata.annotations | get "alb.ingress.kubernetes.io/subnets") "subnet-a,subnet-b"
             assert equal ($ing.metadata.annotations | get "external-dns.alpha.kubernetes.io/hostname") "auth.example.io,broker.example.io"
+            # health-check Istio's status port, else the ALB 404s on `/` and 503s every route
+            assert equal ($ing.metadata.annotations | get "alb.ingress.kubernetes.io/healthcheck-port") "15021"
+            assert equal ($ing.metadata.annotations | get "alb.ingress.kubernetes.io/healthcheck-path") "/healthz/ready"
+            assert equal ($ing.metadata.annotations | get "alb.ingress.kubernetes.io/success-codes") "200"
             # auth host -> all paths; broker host -> callback only; both to the istio-ingress service
             assert equal ($ing.spec.rules.0.host) "auth.example.io"
             assert equal ($ing.spec.rules.0.http.paths.0.path) "/"

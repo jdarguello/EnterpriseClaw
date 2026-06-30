@@ -90,6 +90,11 @@ def "kagent-exposure ingress" [
                 "alb.ingress.kubernetes.io/backend-protocol": "HTTP"
                 "alb.ingress.kubernetes.io/listen-ports": '[{"HTTPS":443}, {"HTTP":80}]'
                 "alb.ingress.kubernetes.io/ssl-redirect": "443"
+                # Health-check Istio's status port: the istio-ingress gateway 404s on a bare `/`,
+                # so the ALB default `/`→200 check marks targets unhealthy → 503. See CLAUDE.md §6.
+                "alb.ingress.kubernetes.io/healthcheck-port": "15021"
+                "alb.ingress.kubernetes.io/healthcheck-path": "/healthz/ready"
+                "alb.ingress.kubernetes.io/success-codes": "200"
                 "alb.ingress.kubernetes.io/group.name": $group_name
                 "alb.ingress.kubernetes.io/subnets": $subnets
                 "external-dns.alpha.kubernetes.io/hostname": $ui_host

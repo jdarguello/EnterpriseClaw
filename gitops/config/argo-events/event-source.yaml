@@ -22,7 +22,10 @@ spec:
         - "push"
       webhookSecret:
         name: webhook-secret
-        key: secret-key
+        # Key as materialized by the webhook ExternalSecret (dataFrom.extract copies the SM
+        # `webhook-creds` JSON key verbatim). Referencing `secret-key` crash-looped the pod:
+        # "open /argo-events/secrets/webhook-secret/secret-key: no such file or directory".
+        key: WEBHOOK_SECRET
       insecure: true
       active: true
       contentType: json

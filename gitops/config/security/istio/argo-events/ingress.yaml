@@ -7,6 +7,13 @@ metadata:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/ssl-redirect: "443"
     alb.ingress.kubernetes.io/target-type: ip
+    # Health-check Istio's status port, not the traffic port. The istio-ingress gateway returns
+    # 404 on a bare `GET /` (no Host matches a VirtualService), so the ALB's default `/`→200 check
+    # marks every target unhealthy → 503 for ALL routes. Port 15021 /healthz/ready returns 200
+    # whenever the proxy is up. See CLAUDE.md §6 (ALB health-check fragility).
+    alb.ingress.kubernetes.io/healthcheck-port: "15021"
+    alb.ingress.kubernetes.io/healthcheck-path: /healthz/ready
+    alb.ingress.kubernetes.io/success-codes: "200"
   finalizers:
   - ingress.k8s.aws/resources
   generation: 1
