@@ -59,8 +59,8 @@ module "eks" {
       instance_types = var.node_instance_types
 
       min_size     = 1
-      max_size     = 5
-      desired_size = 4
+      max_size     = 8
+      desired_size = 6
 
       subnet_ids = var.private_subnet_ids
 
