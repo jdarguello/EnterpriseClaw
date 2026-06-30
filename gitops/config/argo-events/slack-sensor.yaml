@@ -1,0 +1,72 @@
+# Slack Sensor — turns an inbound Slack `app_mention` into one short-lived Argo Workflow.
+#
+# This is the first link of the ArgoCon "Golden Path via chat" spine (CLAUDE.md §2.2):
+#     Slack EventSource (/slack) → NATS EventBus → THIS Sensor → Argo Workflow (one run per message)
+#
+# CAPTURE-FIRST iteration. The Argo Events Slack source dispatches, for an `event_callback`,
+# `json.Marshal(&eventsAPIEvent.InnerEvent)` (the inner Slack event). The slack-go nested-struct
+# serialization (esp. the `Data interface{}` field) is not worth guessing, so this first version:
+#   - has NO data filter (the Slack app is subscribed to ONLY `app_mention`, and url_verification
+#     is answered inline and never dispatched — so the only thing that reaches here IS a mention),
+#   - maps the ENTIRE event body into a single `event_body` workflow parameter.
+# The created Workflow object then literally carries the raw JSON as that param value, so we read
+# the exact schema with `kubectl get wf -n argo <name> -o jsonpath=...` and TIGHTEN afterwards
+# (add a `body.<type-path>` == app_mention filter + pull text/user/channel/thread_ts into named
+# params for the real agent workflow).
+#
+# RBAC: the Sensor runs as ns-default SA, which clusterrolebinding.yaml binds to ClusterRole
+# `admin`, so it may create Workflows in ns `argo` (same path the github-push sensor uses).
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: slack-mention
+  namespace: argo-events
+spec:
+  template:
+    serviceAccountName: default
+  dependencies:
+    # eventName `chat` = the key under `spec.slack:` in slack-event-source.yaml (the webhook name).
+    - name: slack-event
+      eventSourceName: slack
+      eventName: chat
+  triggers:
+    - template:
+        name: slack-mention-workflow
+        k8s:
+          operation: create
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: slack-mention-
+                namespace: argo
+              spec:
+                serviceAccountName: pipe-storage
+                entrypoint: echo-event
+                # ttlStrategy keeps the cluster tidy: these capture runs self-delete shortly after.
+                ttlStrategy:
+                  secondsAfterCompletion: 600
+                arguments:
+                  parameters:
+                    - name: event_body
+                templates:
+                  - name: echo-event
+                    inputs:
+                      parameters:
+                        - name: event_body
+                    container:
+                      # public.ecr.aws → no Docker Hub pull-rate limit on EKS nodes.
+                      image: public.ecr.aws/docker/library/busybox:1.36
+                      command: [sh, -c]
+                      args: ["echo 'inbound Slack app_mention body:'; echo \"$EVENT_BODY\""]
+                      env:
+                        - name: EVENT_BODY
+                          value: "{{inputs.parameters.event_body}}"
+          # Map the whole dispatched body into the single param. dataKey `body` = the marshalled
+          # InnerEvent; Argo Events JSON-encodes it into the string parameter.
+          parameters:
+            - src:
+                dependencyName: slack-event
+                dataKey: body
+              dest: spec.arguments.parameters.0.value

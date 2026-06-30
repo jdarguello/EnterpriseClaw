@@ -6,6 +6,7 @@ resources:
 - slack-external-secret.yaml
 - clusterrolebinding.yaml
 - sensor.yaml
+- slack-sensor.yaml
 - sa-inner.yaml
 - sa-webhook.yaml
 - eventbus.yaml
