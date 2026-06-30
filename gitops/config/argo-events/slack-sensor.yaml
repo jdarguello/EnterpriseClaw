@@ -4,15 +4,16 @@
 #     Slack EventSource (/slack) → NATS EventBus → THIS Sensor → Argo Workflow (one run per message)
 #
 # CAPTURE-FIRST iteration. The Argo Events Slack source dispatches, for an `event_callback`,
-# `json.Marshal(&eventsAPIEvent.InnerEvent)` (the inner Slack event). The slack-go nested-struct
-# serialization (esp. the `Data interface{}` field) is not worth guessing, so this first version:
-#   - has NO data filter (the Slack app is subscribed to ONLY `app_mention`, and url_verification
+# `json.Marshal(&eventsAPIEvent.InnerEvent)` (the inner Slack event) DIRECTLY as the event Data —
+# there is NO `body`/`header` wrapper (unlike the github webhook source, hence its `body.repo…`).
+# Trigger params are resolved with gjson against that payload, so:
+#   - NO data filter yet (the Slack app is subscribed to ONLY `app_mention`, and url_verification
 #     is answered inline and never dispatched — so the only thing that reaches here IS a mention),
-#   - maps the ENTIRE event body into a single `event_body` workflow parameter.
-# The created Workflow object then literally carries the raw JSON as that param value, so we read
-# the exact schema with `kubectl get wf -n argo <name> -o jsonpath=...` and TIGHTEN afterwards
-# (add a `body.<type-path>` == app_mention filter + pull text/user/channel/thread_ts into named
-# params for the real agent workflow).
+#   - `dataKey: "@this"` (gjson "whole document") captures the ENTIRE inner event into `event_body`,
+#   - a `log` trigger additionally dumps the raw event to the sensor pod logs.
+# The created Workflow object then carries the raw JSON as that param value, so we read the exact
+# schema (`kubectl get wf -n argo <name> -o jsonpath=...` and/or the sensor logs) and TIGHTEN
+# afterwards (add a `type == app_mention` filter + pull text/user/channel/thread_ts into params).
 #
 # RBAC: the Sensor runs as ns-default SA, which clusterrolebinding.yaml binds to ClusterRole
 # `admin`, so it may create Workflows in ns `argo` (same path the github-push sensor uses).
@@ -30,6 +31,11 @@ spec:
       eventSourceName: slack
       eventName: chat
   triggers:
+    # Raw payload dump to the sensor pod logs — ground-truth schema discovery.
+    - template:
+        name: slack-log
+        log:
+          intervalSeconds: 1
     - template:
         name: slack-mention-workflow
         k8s:
@@ -63,10 +69,10 @@ spec:
                       env:
                         - name: EVENT_BODY
                           value: "{{inputs.parameters.event_body}}"
-          # Map the whole dispatched body into the single param. dataKey `body` = the marshalled
-          # InnerEvent; Argo Events JSON-encodes it into the string parameter.
+          # gjson "@this" = the entire dispatched payload (the marshalled InnerEvent). No `body`
+          # wrapper exists for the Slack source, so we grab the whole document here.
           parameters:
             - src:
                 dependencyName: slack-event
-                dataKey: body
+                dataKey: "@this"
               dest: spec.arguments.parameters.0.value
