@@ -125,3 +125,49 @@ module "irsa_ebs_csi" {
     Environment = "dev"
   }
 }
+
+# Least-privilege IAM policy for the agentgateway data-plane proxy to call Bedrock.
+# Scoped to InvokeModel / InvokeModelWithResponseStream ONLY, on the Claude Haiku 4.5
+# cross-region (system-defined) inference profile plus the underlying foundation-model
+# ARNs it routes to (region-wildcard, gated by bedrock:InferenceProfileArn) — the AWS-
+# documented shape for invoking via an inference profile. No bedrock:* / no Resource:*.
+module "bedrock_policy" {
+  source = "terraform-aws-modules/iam/aws//modules/iam-policy"
+
+  name        = "${var.cluster_name}-agentgateway-bedrock-policy"
+  path        = "/"
+  description = "Least-privilege Bedrock InvokeModel for the agentgateway LLM-gateway proxy (Claude Haiku 4.5 inference profile)"
+
+  policy = file("${path.module}/policies/bedrock_invoke.json")
+
+  tags = {
+    OpenTofu    = "true"
+    Environment = "dev"
+  }
+}
+
+# IRSA role for the agentgateway data-plane proxy ServiceAccount (kagent:agentic-gw).
+# This SA is the §2.2 production LLM-gateway identity rail — only agentgateway holds
+# bedrock:InvokeModel. Matches the repo's IRSA-via-OIDC pattern (iam-role-for-service-
+# accounts bound to the cluster OIDC provider), same as irsa_ebs_csi above.
+module "irsa_bedrock" {
+  source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+
+  name = "${var.cluster_name}-agentgateway-bedrock"
+
+  oidc_providers = {
+    bedrock_oidc = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["kagent:agentic-gw"]
+    }
+  }
+
+  policies = {
+    policy = module.bedrock_policy.arn
+  }
+
+  tags = {
+    OpenTofu    = "true"
+    Environment = "dev"
+  }
+}

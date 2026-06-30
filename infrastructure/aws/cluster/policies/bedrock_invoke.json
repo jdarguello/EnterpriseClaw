@@ -1,0 +1,32 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "InvokeViaHaikuInferenceProfile",
+            "Effect": "Allow",
+            "Action": [
+                "bedrock:InvokeModel",
+                "bedrock:InvokeModelWithResponseStream"
+            ],
+            "Resource": [
+                "arn:aws:bedrock:us-east-1:158623290227:inference-profile/us.anthropic.claude-haiku-4-5-*"
+            ]
+        },
+        {
+            "Sid": "InvokeUnderlyingHaikuFoundationModels",
+            "Effect": "Allow",
+            "Action": [
+                "bedrock:InvokeModel",
+                "bedrock:InvokeModelWithResponseStream"
+            ],
+            "Resource": [
+                "arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-*"
+            ],
+            "Condition": {
+                "StringLike": {
+                    "bedrock:InferenceProfileArn": "arn:aws:bedrock:us-east-1:158623290227:inference-profile/us.anthropic.claude-haiku-4-5-*"
+                }
+            }
+        }
+    ]
+}

@@ -29,6 +29,10 @@ output "oidc_provider_arn" {
   value = module.cluster.oidc_provider_arn
 }
 
+output "bedrock_irsa_arn" {
+  value = module.cluster.bedrock_irsa_arn
+}
+
 # dns
 output "dns_records_names" {
   value = module.dns.dns_records_names
