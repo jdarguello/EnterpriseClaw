@@ -3,6 +3,12 @@ kind: Application
 metadata:
   name: external-secrets
   namespace: argocd
+  annotations:
+    # Wave -1 within helm-kube-essentials: ESO operator must be Healthy before the
+    # ClusterSecretStore (wave 0) and ExternalSecret (wave 1) in the same Application
+    # can be successfully reconciled. This closes the ESO→CSS→ES ordering fragility
+    # documented in CLAUDE.md §6.
+    argocd.argoproj.io/sync-wave: "-1"
 spec:
   project: default
   sources:
@@ -25,3 +31,9 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

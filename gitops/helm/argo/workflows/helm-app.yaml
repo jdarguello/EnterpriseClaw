@@ -3,6 +3,12 @@ kind: Application
 metadata:
   name: argo-workflows
   namespace: argocd
+  annotations:
+    # Wave 0 within helm-argo: parallel with argo-events. Same reasoning — the
+    # argo-workflows controller itself does not require Services through the ALB webhook;
+    # config-argo-workflows (top-level wave 1) handles its ExternalSecret/ConfigMap
+    # overlays after ESO is healthy.
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   project: default
   sources:
@@ -25,3 +31,9 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

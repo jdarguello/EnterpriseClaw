@@ -4,6 +4,12 @@ metadata:
   name: istio-ingress
   namespace: argocd
   annotations:
+    # Wave 1 within helm-istio: MUST come after istio-system (wave 0).
+    # The istio gateway Deployment ships image: auto — the istio-sidecar-injector
+    # mutating webhook (owned by istiod, installed by istio-system) rewrites that
+    # placeholder at admission time. If the gateway pod is admitted before istiod
+    # registers the webhook, it starts with the literal image: auto and
+    # ImagePullBackOffs forever. Wave 1 ensures istiod is Healthy first (Race B fix).
     argocd.argoproj.io/sync-wave: "1"
 spec:
   project: default
@@ -27,3 +33,9 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

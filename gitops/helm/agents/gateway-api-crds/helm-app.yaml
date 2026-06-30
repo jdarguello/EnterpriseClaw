@@ -34,3 +34,9 @@ spec:
     syncOptions:
       - ServerSideApply=true      # Gateway API CRDs are large — avoids last-applied-config annotation size limit
       - Replace=false
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

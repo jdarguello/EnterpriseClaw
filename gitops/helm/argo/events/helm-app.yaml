@@ -3,6 +3,14 @@ kind: Application
 metadata:
   name: argo-events
   namespace: argocd
+  annotations:
+    # Wave 0 within helm-argo: Argo Events controller itself does not create Services
+    # that go through the ALB webhook, so it can start at wave 0. The ExternalSecret
+    # objects that surface webhook/git-creds into argo-events live in config-argo-events
+    # (top-level wave 1), which only starts after the helm AppSet (top-level wave 0) is
+    # Healthy — ensuring ESO + ClusterSecretStore are ready before those ExternalSecrets
+    # are applied.
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   project: default
   sources:
@@ -25,3 +33,9 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

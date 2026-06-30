@@ -23,3 +23,9 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true   # kagent CRDs are large; avoid the last-applied-config annotation size limit
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

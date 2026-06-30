@@ -6,14 +6,21 @@
 # repo. Add a new component directory under gitops/agentic/ and it is onboarded automatically.
 #
 # Generates: agentic-llm-gateway (the agentgateway->Bedrock proxy), agentic-agents (the kagent
-# Agent + ModelConfig CRs), agentic-mcps (tool servers — empty for now).
+# Agent + ModelConfig CRs), agentic-mcps (tool servers), agentic-mcp-gateway (agentgateway routes).
 #
 # All CRs land in the `kagent` namespace (the kagent controller's WATCH_NAMESPACES).
+#
+# Wave 2: agentic CRs require kagent-trio controllers (agents AppSet, wave 1) to be Healthy
+# and the ESO ClusterSecretStore (helm AppSet, wave 0) to be Ready before ExternalSecrets
+# in agentic-mcps can resolve. Applied as a sync-wave on the AppSet object itself so that
+# the parent app-of-apps waits for waves 0 and 1 to complete first.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
   name: agentic
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   generators:
     - git:
@@ -39,3 +46,9 @@ spec:
         automated:
           prune: true
           selfHeal: true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m

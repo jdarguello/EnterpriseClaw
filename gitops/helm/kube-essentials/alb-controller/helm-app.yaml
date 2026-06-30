@@ -3,6 +3,13 @@ kind: Application
 metadata:
   name: alb-controller
   namespace: argocd
+  annotations:
+    # Wave 0 within helm-kube-essentials. The ALB controller registers a mutating webhook
+    # (mservice.elbv2.k8s.aws) with failurePolicy=Fail. It MUST be Healthy before ANY
+    # Application that creates Services is synced, or those Service creates are rejected.
+    # Sits in wave 0 (after external-secrets at wave -1) so it is fully up before
+    # the configs AppSet (top-level wave 1) begins syncing Service-creating apps.
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   project: default
   sources:
@@ -25,3 +32,9 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

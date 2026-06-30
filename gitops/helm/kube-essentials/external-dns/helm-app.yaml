@@ -3,6 +3,12 @@ kind: Application
 metadata:
   name: external-dns
   namespace: argocd
+  annotations:
+    # Wave 0 within helm-kube-essentials: parallel with alb-controller.
+    # external-dns has no webhook and does not block other apps — placed at wave 0
+    # so it is available before the configs AppSet (top-level wave 1) creates Ingresses
+    # that need DNS records.
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   project: default
   sources:
@@ -25,3 +31,9 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
