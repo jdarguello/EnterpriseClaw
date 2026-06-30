@@ -17,10 +17,26 @@
 #   materialized by `external-secret-github-creds.yaml` (a ClusterSecretStore→SM extract).
 #   The OUTPUT goes to a SEPARATE secret (`github-issues-token`) so there is no cycle.
 #
-# Least-privilege scope:
+# Least-privilege scope (INTENT — see caveats below):
 #   Pinned to repository `EnterpriseClaw-Sandbox` and permission `issues: write`
 #   (write implies read — covers list/search/read/create). No PR or repo-admin tools are
 #   exposed through this token; those belong to the infra-provisioning MCP's scope.
+#
+#   ⚠ PREREQ — the GitHub App itself must GRANT `issues: read & write`. The minted
+#   installation token can only ever carry permissions the App was granted in its GitHub
+#   App settings. App ID 3799768 (reused from the Argo create-github-app-token mint) was
+#   originally granted only `contents` — so issue calls 403 ("Resource not accessible by
+#   integration") until an App admin adds Issues: Read & write in the App settings and the
+#   installation accepts the updated permission. This is a GitHub-console action, not code.
+#
+#   ⚠ ESO 0.10.5 CAVEAT — the `GithubAccessToken` v1alpha1 CRD at this version does NOT
+#   include `permissions:` or `repositories:` in its schema, so the two fields below are
+#   SILENTLY DROPPED on admission. The minted token therefore inherits the App installation's
+#   FULL scope (all repos the install can see, all granted permissions), not the narrowing
+#   declared here. Acceptable for the single-repo sandbox install; for least-privilege /
+#   multi-tenant, upgrade ESO to a version whose GithubAccessToken CRD supports these fields
+#   (verify against the ESO changelog) — the fields are kept here so the narrowing activates
+#   automatically once the CRD supports them.
 #
 # SANDBOX NOTE — parameterize before OSS release:
 #   `appID` and `installID` are inlined sandbox identifiers (not secrets, but env-specific).
@@ -42,7 +58,10 @@ spec:
   # Non-secret GitHub App identifiers — inlined sandbox values; parameterize for OSS release.
   appID: "3799768"
   installID: "138693902"
-  # Least-privilege: single repo, issues write (implies read) only.
+  # Least-privilege intent: single repo, issues write (implies read) only.
+  # NOTE: silently DROPPED by ESO 0.10.5's GithubAccessToken CRD (fields not in schema) —
+  # kept for when ESO is upgraded; today the token inherits the App install's full scope.
+  # Also requires the App to be granted Issues:R/W in GitHub App settings (see header).
   repositories:
     - EnterpriseClaw-Sandbox
   permissions:
