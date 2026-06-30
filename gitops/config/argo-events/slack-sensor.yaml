@@ -3,17 +3,22 @@
 # This is the first link of the ArgoCon "Golden Path via chat" spine (CLAUDE.md §2.2):
 #     Slack EventSource (/slack) → NATS EventBus → THIS Sensor → Argo Workflow (one run per message)
 #
-# CAPTURE-FIRST iteration. The Argo Events Slack source dispatches, for an `event_callback`,
-# `json.Marshal(&eventsAPIEvent.InnerEvent)` (the inner Slack event) DIRECTLY as the event Data —
-# there is NO `body`/`header` wrapper (unlike the github webhook source, hence its `body.repo…`).
-# Trigger params are resolved with gjson against that payload, so:
-#   - NO data filter yet (the Slack app is subscribed to ONLY `app_mention`, and url_verification
-#     is answered inline and never dispatched — so the only thing that reaches here IS a mention),
-#   - `dataKey: "@this"` (gjson "whole document") captures the ENTIRE inner event into `event_body`,
-#   - a `log` trigger additionally dumps the raw event to the sensor pod logs.
-# The created Workflow object then carries the raw JSON as that param value, so we read the exact
-# schema (`kubectl get wf -n argo <name> -o jsonpath=...` and/or the sensor logs) and TIGHTEN
-# afterwards (add a `type == app_mention` filter + pull text/user/channel/thread_ts into params).
+# SCHEMA (verified live 2026-06-30 by replaying a signed synthetic app_mention through the source).
+# The Argo Events Slack source dispatches `json.Marshal(&eventsAPIEvent.InnerEvent)` DIRECTLY as the
+# event Data — there is NO `body`/`header` wrapper (unlike the github webhook source). Trigger params
+# and filters are resolved with gjson against that payload, whose exact shape is:
+#     {
+#       "type": "app_mention",                 # InnerEvent.Type  → filter on this
+#       "Data": {                              # capital-D: slack-go InnerEvent.Data (no json tag)
+#         "type": "app_mention",
+#         "user":      "U…",                   # who mentioned the bot  → Step 0 identity (X-Slack-User-Id)
+#         "text":      "<@U0BOT> …",           # the order text         → fed to the agent
+#         "ts":        "1719…",                # message ts             → reply thread root if thread_ts==""
+#         "thread_ts": "",                     # set when mentioned inside a thread (else empty)
+#         "channel":   "C…",                   # where to reply
+#         "event_ts":  "1719…"
+#       }
+#     }
 #
 # RBAC: the Sensor runs as ns-default SA, which clusterrolebinding.yaml binds to ClusterRole
 # `admin`, so it may create Workflows in ns `argo` (same path the github-push sensor uses).
@@ -30,12 +35,15 @@ spec:
     - name: slack-event
       eventSourceName: slack
       eventName: chat
+      # Defense-in-depth: the app is subscribed to only app_mention today, but pin the trigger to
+      # app_mention so adding more bot events later can't accidentally fire this workflow.
+      filters:
+        data:
+          - path: type
+            type: string
+            value:
+              - app_mention
   triggers:
-    # Raw payload dump to the sensor pod logs — ground-truth schema discovery.
-    - template:
-        name: slack-log
-        log:
-          intervalSeconds: 1
     - template:
         name: slack-mention-workflow
         k8s:
@@ -50,29 +58,73 @@ spec:
               spec:
                 serviceAccountName: pipe-storage
                 entrypoint: echo-event
-                # ttlStrategy keeps the cluster tidy: these capture runs self-delete shortly after.
                 ttlStrategy:
                   secondsAfterCompletion: 600
+                # These five fields are exactly what the downstream steps consume:
+                #   user           → Workflow Step 0 (Session-Broker /identity/resolve, X-Slack-User-Id)
+                #   text           → the order, forwarded to the agent (A2A message/send)
+                #   channel/ts/thread_ts → where + which thread to post the reply back into
                 arguments:
                   parameters:
-                    - name: event_body
+                    - name: text
+                    - name: user
+                    - name: channel
+                    - name: ts
+                    - name: thread_ts
                 templates:
                   - name: echo-event
                     inputs:
                       parameters:
-                        - name: event_body
+                        - name: text
+                        - name: user
+                        - name: channel
+                        - name: ts
+                        - name: thread_ts
                     container:
                       # public.ecr.aws → no Docker Hub pull-rate limit on EKS nodes.
                       image: public.ecr.aws/docker/library/busybox:1.36
                       command: [sh, -c]
-                      args: ["echo 'inbound Slack app_mention body:'; echo \"$EVENT_BODY\""]
+                      args:
+                        - |
+                          echo "Slack app_mention received:"
+                          echo "  user:      $SLACK_USER"
+                          echo "  channel:   $SLACK_CHANNEL"
+                          echo "  ts:        $SLACK_TS"
+                          echo "  thread_ts: $SLACK_THREAD_TS"
+                          echo "  text:      $SLACK_TEXT"
                       env:
-                        - name: EVENT_BODY
-                          value: "{{inputs.parameters.event_body}}"
-          # gjson "@this" = the entire dispatched payload (the marshalled InnerEvent). No `body`
-          # wrapper exists for the Slack source, so we grab the whole document here.
+                        - name: SLACK_TEXT
+                          value: "{{inputs.parameters.text}}"
+                        - name: SLACK_USER
+                          value: "{{inputs.parameters.user}}"
+                        - name: SLACK_CHANNEL
+                          value: "{{inputs.parameters.channel}}"
+                        - name: SLACK_TS
+                          value: "{{inputs.parameters.ts}}"
+                        - name: SLACK_THREAD_TS
+                          value: "{{inputs.parameters.thread_ts}}"
+          # gjson paths into the dispatched inner event (NO `body` wrapper for the Slack source).
+          # thread_ts carries a `value:` default so an empty/absent thread (top-level mention) can't
+          # fail param resolution and wedge the trigger.
           parameters:
             - src:
                 dependencyName: slack-event
-                dataKey: "@this"
+                dataKey: Data.text
               dest: spec.arguments.parameters.0.value
+            - src:
+                dependencyName: slack-event
+                dataKey: Data.user
+              dest: spec.arguments.parameters.1.value
+            - src:
+                dependencyName: slack-event
+                dataKey: Data.channel
+              dest: spec.arguments.parameters.2.value
+            - src:
+                dependencyName: slack-event
+                dataKey: Data.ts
+              dest: spec.arguments.parameters.3.value
+            - src:
+                dependencyName: slack-event
+                dataKey: Data.thread_ts
+                value: ""
+              dest: spec.arguments.parameters.4.value
