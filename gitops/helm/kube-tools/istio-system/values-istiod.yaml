@@ -1,6 +1,19 @@
 profile: "ambient"
 trustedZtunnelNamespace: "istio-system"
 
+# Trust the AWS ALB that sits 1 hop in front of the ingress gateway.
+# The ALB terminates TLS at :443 and forwards HTTP to the gateway, appending
+# X-Forwarded-Proto: https / X-Forwarded-For: <client>. Without this, Envoy
+# (use_remote_address=true) OVERWRITES X-Forwarded-Proto to "http" — so any
+# proxy-aware backend (e.g. Keycloak with KC_PROXY_HEADERS=xforwarded) sees an
+# insecure request and refuses with "HTTPS required". numTrustedProxies=1 makes
+# the gateway trust the ALB's forwarded proto + client IP for ALL fronted hosts
+# (auth/broker/argocd/workflows/kagent-ui). One ALB hop → 1.
+meshConfig:
+  defaultConfig:
+    gatewayTopology:
+      numTrustedProxies: 1
+
 # istiod (pilot) resources. The chart default REQUESTS 2Gi memory, which is unschedulable on small
 # nodes (it left istiod Pending — "Insufficient memory" — on the dry-run VM). 384Mi is a sane
 # scheduling floor for a small/medium mesh; no memory limit is set so istiod can still burst under

@@ -181,9 +181,16 @@ spec:
                       args:
                         - |
                           enterpriseclaw a2a call --url $env.CLASSIFIER_URL --message $env.USER_TEXT --out /tmp/a2a.json
+                          # The classifier is prompted to emit BARE single-line JSON, but Haiku
+                          # intermittently wraps it in a ```json ... ``` markdown fence (and could add
+                          # stray prose). `from json` throws on the fence, which would default us to
+                          # "action" and wrongly wall a greeting behind login. Extract the first {...}
+                          # object first so parsing is robust to fences/prose; fail-closed to "action".
                           let category = (
                             try {
-                              open /tmp/a2a.json | get text | from json | get category | str downcase | str trim
+                              let raw = (open /tmp/a2a.json | get text)
+                              let json_str = ($raw | str replace --all --regex '(?s)^[^{]*(\{.*\})[^}]*$' '$1')
+                              $json_str | from json | get category | str downcase | str trim
                             } catch {
                               "action"
                             }
