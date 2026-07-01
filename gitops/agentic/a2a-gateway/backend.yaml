@@ -5,7 +5,9 @@
 # agent over A2A"). The A2A JSON-RPC endpoint is the pod's base URL (no path suffix — the agent
 # serves at `/`; the Workflow calls `message/send` as JSON-RPC).
 #
-# === CRD SHAPE UNCERTAINTY (A2A backend — verify on the live cluster) ===========================
+# === CRD SHAPE — RESOLVED 2026-07-01: confirmed flat {host, port} via kubectl explain (see below) ===
+# (Historical note: the options survey below was the pre-verification reasoning; the live CRD uses
+#  the flat host/port form — encoded in spec.a2a further down. Kept for provenance.)
 #
 # The installed AgentgatewayBackend CRD (agentgateway.dev/v1alpha1 @ 1.3.1) is well-documented
 # for `spec.mcp` (proven in dry-run, crds.md) and `spec.ai` (proven in llm-gateway/backend.yaml).
@@ -61,17 +63,14 @@ metadata:
   name: platform-agent-a2a-backend
   namespace: kagent
 spec:
-  # Best-inference shape for A2A backend (Option A — verify with kubectl explain, see header above)
+  # A2A backend shape CONFIRMED against the live CRD (agentgateway.dev/v1alpha1 @ 1.3.1,
+  # 2026-07-01 via `kubectl explain agentgatewaybackend.spec.a2a`): a flat {host, port} —
+  # NOT the mcp-style targets[].static. host = the platform-agent ClusterIP Service FQDN;
+  # the A2A JSON-RPC endpoint is the pod base URL (`/`) — the /platform-agent prefix is stripped
+  # by the HTTPRoute URLRewrite filter (httproute.yaml) before the request reaches this backend.
   a2a:
-    targets:
-      - name: platform-agent
-        static:
-          backendRef:
-            name: platform-agent    # the platform-agent ClusterIP Service (same namespace)
-          port: 8080
-          # No `path` field — the A2A JSON-RPC endpoint is the pod base URL (`/`);
-          # the /platform-agent prefix is stripped by the HTTPRoute URLRewrite filter
-          # (see httproute.yaml) before the request hits this backend.
+    host: platform-agent.kagent.svc.cluster.local
+    port: 8080
   # PASSTHROUGH — forward the validated user bearer to platform-agent so it can propagate it
   # onward via allowedHeaders: ["Authorization"] to the downstream MCP-gateway hop.
   # This differs from mcp-gateway backends (where passthrough is OFF because the user JWT stops
