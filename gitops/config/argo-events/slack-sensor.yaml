@@ -385,8 +385,10 @@ spec:
                   # ── TEMPLATE: act-step ────────────────────────────────────────────────────
                   # has_token==true: A2A VIA agentgateway to platform-agent (Bearer = user JWT).
                   # Token arrives via inputs.parameters.token (from resolve outputs.parameters.token).
-                  # NOTE: platform-agent is currently NOT Ready (mcp-discovery-token Secret missing).
-                  # This branch goes live once that Secret is provisioned (separate task).
+                  # LIVE (verified 2026-07-01): the user JWT validates at the A2A gateway (200) and
+                  # drives both MCP routes (200), claim-gated. The transcript is wrapped with an
+                  # ACTION-framing directive (act_msg) so the action agent does NOT inherit the
+                  # read-only reader's persona from earlier thread turns.
                   - name: act-step
                     inputs:
                       parameters:
@@ -407,9 +409,16 @@ spec:
                               if ($t | is-empty) { $env.USER_TEXT } else { $t }
                             } catch { $env.USER_TEXT }
                           )
+                          # Wrap the transcript with an ACTION-framing directive. Conversation state is
+                          # the shared Slack thread, which may contain earlier turns from the READ-ONLY
+                          # github-reader ("I'm read-only, I can't create issues"). Without this frame the
+                          # action agent inherits that persona and refuses its write tools (observed
+                          # 2026-07-01). This tells it to disregard prior read-only claims and fulfill the
+                          # LAST user request with its own tools.
+                          let act_msg = $"You are the EnterpriseClaw platform ACTION agent and you HAVE WRITE TOOLS. Below is a Slack conversation transcript. Fulfill the LAST user request. DISREGARD any earlier assistant turn that claims to be read-only or unable to create/write — those came from a different assistant and are NOT your limits. If the user asks to create an issue, CALL your issue_write tool and actually create it; never tell them to do it manually.\n\n=== CONVERSATION ===\n($convo)\n=== END ==="
                           # A2A call to platform-agent via agentgateway (JWT on the wire).
                           # exitcode != 0 → agentgateway rejected the token (401/403/5xx/transport).
-                          enterpriseclaw a2a call --url $env.ACTION_URL --message $convo --token $env.USER_JWT --out /tmp/act.json
+                          enterpriseclaw a2a call --url $env.ACTION_URL --message $act_msg --token $env.USER_JWT --out /tmp/act.json
                           let answer = (
                             try {
                               open /tmp/act.json | get text
