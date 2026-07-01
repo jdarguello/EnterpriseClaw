@@ -33,6 +33,20 @@ def "broker-tests" [] {
             assert equal $m.token "jwt-alt"
         }}
 
+        # ---- parse-resolve: CONFIRMED live shape — discriminated union on `type` ----
+        { name: "parse-resolve honors type==authenticated + access_token (live shape)", run: {||
+            let m = (broker parse-resolve { type: "authenticated", access_token: "jwt-live", sub: "u1", slack_user_id: "U1" })
+            assert equal $m.has_token true
+            assert equal $m.token "jwt-live"
+        }}
+
+        # ---- parse-resolve: type==unauthenticated → the login-required branch ----
+        { name: "parse-resolve honors type==unauthenticated (live shape)", run: {||
+            let m = (broker parse-resolve { type: "unauthenticated", slack_user_id: "U1" })
+            assert equal $m.has_token false
+            assert equal $m.token ""
+        }}
+
         # ---- parse-resolve: missing / non-record ----
         { name: "parse-resolve handles missing fields / non-record", run: {||
             let m = (broker parse-resolve {})

@@ -1,0 +1,45 @@
+# RBAC for the mcp-discovery-token minter.
+#
+# Principle of least privilege: the ServiceAccount `discovery-token-minter` is granted ONLY
+# create/update/get on Secrets in ns `kagent`. It can read `kagent-controller-client-secret`
+# (the client secret ESO wrote) and write/update `mcp-discovery-token` (the JWT the CronJob mints).
+# No other verbs, no other resource types, no cluster-wide access.
+#
+# Sync-wave: wave 0 (same wave as the ExternalSecret) — RBAC must exist before the Job/CronJob
+# (wave 1) tries to use the ServiceAccount.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: discovery-token-minter
+  namespace: kagent
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: discovery-token-minter
+  namespace: kagent
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: discovery-token-minter
+  namespace: kagent
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: discovery-token-minter
+subjects:
+  - kind: ServiceAccount
+    name: discovery-token-minter
+    namespace: kagent

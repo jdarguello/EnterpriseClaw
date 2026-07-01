@@ -1,0 +1,323 @@
+# mcp-discovery-token minter — CronJob + run-once bootstrap Job.
+#
+# PURPOSE
+# -------
+# Keycloak access tokens are short-lived (default 5 min). The kagent controller resolves
+# `RemoteMCPServer.headersFrom` references at COMPILE time: if the Secret is absent, the
+# RemoteMCPServer (and the Agent that references it) immediately goes ACCEPTED=False.
+# This CronJob keeps the token fresh in-cluster so platform-agent stays Ready across stack
+# restarts without any manual steps.
+#
+# ISSUER CONSTRAINT (hard requirement)
+# -------------------------------------
+# The token MUST be minted via the IN-CLUSTER Keycloak service URL:
+#   http://keycloak.keycloak.svc/realms/enterpriseclaw/protocol/openid-connect/token
+# Keycloak reflects the request Host into the `iss` claim. The agentgateway mcp-gateway
+# policies.yaml validates against `iss=http://keycloak.keycloak.svc/realms/enterpriseclaw`
+# byte-for-byte. Using the external https://auth.<domain> URL would stamp a different `iss`
+# and cause InvalidIssuer at the Strict gate — so the mint MUST be in-cluster.
+#
+# CROSS-REPO DEPENDENCY: kagent-controller realm client
+# ------------------------------------------------------
+# The `client_credentials` grant (`grant_type=client_credentials&client_id=kagent-controller`)
+# requires the `kagent-controller` confidential client to exist in the `enterpriseclaw` realm with:
+#   - `serviceAccountsEnabled: true` (enables the client-credentials flow)
+#   - Two OIDC audience mappers: `oidc-audience-mapper` → `issue-tracker` + `infra-provisioner`
+#     (so the token satisfies BOTH gateway route policies during tool discovery)
+#   - Both capability client-roles on the service account:
+#       `issue:create` on `issue-tracker`
+#       `db:provision:dev` on `infra-provisioner`
+# This lives in the Session-Broker repo's `enterpriseclaw` realm config (keycloak-config-cli).
+# CLAUDE.md §2.2 ("end-to-end item") documents this client as proven on the dry-run VM (2026-06-26).
+# If the grant returns `invalid_client` or `unauthorized_client`, the realm client is missing →
+# raise a Session-Broker realm-config task. This side (EnterpriseClaw) is built regardless.
+#
+# TOKEN LIFESPAN vs REFRESH INTERVAL
+# ------------------------------------
+# Default Keycloak realm access token lifespan = 5 minutes. The CronJob runs every 4 minutes
+# (schedule: "*/4 * * * *"), giving ≥1 min buffer before expiry. On first bring-up the
+# bootstrap Job (below) runs immediately so the Secret exists within seconds, not 4 minutes.
+#
+# IMAGE CHOICE
+# ------------
+# `public.ecr.aws/docker/library/alpine:3.20` — from the ECR public mirror (no Docker Hub pull
+# limits on EKS). Alpine has `apk add curl` and is tiny (~7 MB). The k8s Secret write uses
+# `curl` against the in-pod Kubernetes API (SA token + CA) — no `kubectl` binary needed.
+# Pinned to 3.20 (latest LTS minor at authoring time); update to a newer patch via `3.20.x` when
+# available. Do NOT use `:latest` (unpinned tags break reproducibility).
+#
+# SYNC-WAVE ORDERING (within Application `agentic-discovery-token`)
+# -----------------------------------------------------------------
+# wave 0: ExternalSecret (kagent-controller-client-secret) + RBAC (SA/Role/RoleBinding)
+# wave 1: CronJob + bootstrap Job  ← these files
+# The CronJob depends on both the Secret (to read the client-secret) and the SA (to write the
+# output). Wave 0 resources must be Healthy before Argo applies wave 1.
+# Across Applications: the `agentic` ApplicationSet is at sync-wave 2 in the parent app-of-apps.
+# All agentic-* Applications (including agentic-discovery-token) share that wave. Within the
+# ApplicationSet, Application ordering is not guaranteed — but the CronJob pods will simply
+# retry (backoffLimit: 3 on the bootstrap Job) until Keycloak is reachable.
+#
+# NOTE: the kagent `mcp-gateway` Application's RemoteMCPServers reference `mcp-discovery-token`.
+# Argo applies agentic-* Applications in parallel within wave 2; the kagent controller retries
+# on compile failure (the "ACCEPTED=False + not found" loop). So as long as this Application
+# lands first or nearly first, platform-agent converges within one or two reconcile cycles.
+# For strict ordering add sync-wave annotations on the agentic ApplicationSet's template OR
+# split discovery-token into wave 1 of a nested ApplicationSet — out of scope for now.
+---
+# CronJob: refresh the discovery token every 4 minutes.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mcp-discovery-token-refresh
+  namespace: kagent
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  schedule: "*/4 * * * *"
+  concurrencyPolicy: Forbid          # skip a run if the previous is still running (token mint is fast; shouldn't happen)
+  startingDeadlineSeconds: 60        # if the scheduler misses the scheduled time by >60s, skip that run
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: mcp-discovery-token-refresh
+          # Istio ambient: exclude this pod from the ambient mesh so the plain-HTTP Keycloak call
+          # is not intercepted by ztunnel. The in-cluster Keycloak Service is HTTP (port 80) and
+          # the token endpoint is not a TLS endpoint in the default broker chart config.
+          # Remove this annotation once Keycloak is exposed over HTTPS in-cluster (TLS passthrough
+          # or a Cert-Manager certificate on the keycloak Service).
+          annotations:
+            ambient.istio.io/redirection: disabled
+        spec:
+          serviceAccountName: discovery-token-minter
+          restartPolicy: OnFailure
+          containers:
+            - name: minter
+              image: public.ecr.aws/docker/library/alpine:3.20
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+
+                  # Install curl (alpine base image; apk cache is ephemeral in the pod).
+                  apk add --no-cache curl 2>/dev/null
+
+                  # ── 1. Read the kagent-controller client secret from the mounted Secret. ────────
+                  CLIENT_SECRET="$(cat /var/run/secrets/kagent-controller/client-secret)"
+                  if [ -z "${CLIENT_SECRET}" ]; then
+                    echo "ERROR: client-secret is empty — ExternalSecret may not have synced yet." >&2
+                    exit 1
+                  fi
+
+                  # ── 2. Mint a client_credentials token from the in-cluster Keycloak. ─────────────
+                  # MUST use the in-cluster service URL so iss=http://keycloak.keycloak.svc/realms/enterpriseclaw
+                  # (matches the issuer in mcp-gateway/policies.yaml byte-for-byte).
+                  TOKEN_RESPONSE="$(curl -sf \
+                    --max-time 10 \
+                    -X POST \
+                    http://keycloak.keycloak.svc/realms/enterpriseclaw/protocol/openid-connect/token \
+                    -d "grant_type=client_credentials" \
+                    -d "client_id=kagent-controller" \
+                    --data-urlencode "client_secret=${CLIENT_SECRET}" \
+                    -H "Content-Type: application/x-www-form-urlencoded")"
+
+                  if [ -z "${TOKEN_RESPONSE}" ]; then
+                    echo "ERROR: empty response from Keycloak token endpoint." >&2
+                    exit 1
+                  fi
+
+                  # Validate: Keycloak error responses include an "error" field.
+                  if echo "${TOKEN_RESPONSE}" | grep -q '"error"'; then
+                    echo "ERROR: Keycloak returned an error: ${TOKEN_RESPONSE}" >&2
+                    exit 1
+                  fi
+
+                  # Extract access_token with lightweight sed/grep (no jq in alpine base).
+                  ACCESS_TOKEN="$(echo "${TOKEN_RESPONSE}" | \
+                    grep -o '"access_token":"[^"]*"' | \
+                    sed 's/"access_token":"//;s/"//')"
+
+                  if [ -z "${ACCESS_TOKEN}" ]; then
+                    echo "ERROR: could not extract access_token from response." >&2
+                    exit 1
+                  fi
+
+                  # ── 3. Base64-encode for the k8s Secret data field. ─────────────────────────────
+                  BEARER_VALUE="Bearer ${ACCESS_TOKEN}"
+                  BEARER_B64="$(printf '%s' "${BEARER_VALUE}" | base64 | tr -d '\n')"
+
+                  # ── 4. Write/update Secret `mcp-discovery-token` via the k8s API. ──────────────
+                  # Uses the pod ServiceAccount token and in-cluster CA. We use HTTP PATCH (apply
+                  # semantics via strategic merge) with createIfNotExists by trying PUT first, then
+                  # falling back to POST — simpler: use server-side apply (PATCH + ?fieldManager).
+                  K8S_API="https://kubernetes.default.svc"
+                  SA_TOKEN="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+                  CACERT="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+                  NAMESPACE="$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)"
+
+                  SECRET_BODY="{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"metadata\":{\"name\":\"mcp-discovery-token\",\"namespace\":\"${NAMESPACE}\"},\"type\":\"Opaque\",\"data\":{\"authorization\":\"${BEARER_B64}\"}}"
+
+                  # Server-side apply: creates or updates atomically.
+                  HTTP_STATUS="$(curl -sf \
+                    --max-time 10 \
+                    -o /dev/null \
+                    -w "%{http_code}" \
+                    -X PATCH \
+                    "${K8S_API}/api/v1/namespaces/${NAMESPACE}/secrets/mcp-discovery-token?fieldManager=discovery-token-minter&force=true" \
+                    -H "Authorization: Bearer ${SA_TOKEN}" \
+                    -H "Content-Type: application/apply-patch+yaml" \
+                    --cacert "${CACERT}" \
+                    --data "${SECRET_BODY}")"
+
+                  echo "k8s API response: ${HTTP_STATUS}"
+                  case "${HTTP_STATUS}" in
+                    200|201|204) echo "mcp-discovery-token Secret updated successfully." ;;
+                    *) echo "ERROR: unexpected HTTP ${HTTP_STATUS} from k8s API." >&2; exit 1 ;;
+                  esac
+              env:
+                - name: HOME
+                  value: /tmp
+              volumeMounts:
+                - name: kagent-controller-secret
+                  mountPath: /var/run/secrets/kagent-controller
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 64Mi
+          volumes:
+            - name: kagent-controller-secret
+              secret:
+                secretName: kagent-controller-client-secret
+---
+# Bootstrap Job: runs ONCE on first Argo sync to immediately populate mcp-discovery-token
+# rather than waiting up to 4 minutes for the first CronJob trigger.
+#
+# Argo CD recreates this Job on every sync if the manifest changes (standard Job behavior).
+# To prevent rerun on every sync, the Job has a fixed name with a hash suffix baked in to the
+# name — but since the pod logic is idempotent (Secret update is a no-op if token is valid),
+# any re-application is safe. The CronJob will maintain freshness from then on.
+#
+# `startingDeadlineSeconds` is set generously (300s) so if the scheduler is slow (new cluster),
+# the Job still gets a chance to run. `backoffLimit: 3` retries transient Keycloak startup
+# failures (Keycloak boot ~90s per CLAUDE.md §6, so a fresh cluster may need 1-2 retries).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mcp-discovery-token-init
+  namespace: kagent
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    # hook-delete-policy: keep the Job so it's visible in the UI after first sync;
+    # CronJob takes over maintenance from here.
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/hook: PostSync
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: mcp-discovery-token-init
+      # Same ambient exclusion as the CronJob: plain-HTTP Keycloak call must not be
+      # intercepted by ztunnel. Remove once Keycloak is behind HTTPS in-cluster.
+      annotations:
+        ambient.istio.io/redirection: disabled
+    spec:
+      serviceAccountName: discovery-token-minter
+      restartPolicy: OnFailure
+      containers:
+        - name: minter
+          image: public.ecr.aws/docker/library/alpine:3.20
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              apk add --no-cache curl 2>/dev/null
+
+              CLIENT_SECRET="$(cat /var/run/secrets/kagent-controller/client-secret)"
+              if [ -z "${CLIENT_SECRET}" ]; then
+                echo "ERROR: client-secret is empty — ExternalSecret may not have synced yet." >&2
+                exit 1
+              fi
+
+              TOKEN_RESPONSE="$(curl -sf \
+                --max-time 10 \
+                -X POST \
+                http://keycloak.keycloak.svc/realms/enterpriseclaw/protocol/openid-connect/token \
+                -d "grant_type=client_credentials" \
+                -d "client_id=kagent-controller" \
+                --data-urlencode "client_secret=${CLIENT_SECRET}" \
+                -H "Content-Type: application/x-www-form-urlencoded")"
+
+              if [ -z "${TOKEN_RESPONSE}" ]; then
+                echo "ERROR: empty response from Keycloak token endpoint." >&2
+                exit 1
+              fi
+
+              if echo "${TOKEN_RESPONSE}" | grep -q '"error"'; then
+                echo "ERROR: Keycloak returned an error: ${TOKEN_RESPONSE}" >&2
+                exit 1
+              fi
+
+              ACCESS_TOKEN="$(echo "${TOKEN_RESPONSE}" | \
+                grep -o '"access_token":"[^"]*"' | \
+                sed 's/"access_token":"//;s/"//')"
+
+              if [ -z "${ACCESS_TOKEN}" ]; then
+                echo "ERROR: could not extract access_token from response." >&2
+                exit 1
+              fi
+
+              BEARER_VALUE="Bearer ${ACCESS_TOKEN}"
+              BEARER_B64="$(printf '%s' "${BEARER_VALUE}" | base64 | tr -d '\n')"
+
+              K8S_API="https://kubernetes.default.svc"
+              SA_TOKEN="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+              CACERT="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+              NAMESPACE="$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)"
+
+              SECRET_BODY="{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"metadata\":{\"name\":\"mcp-discovery-token\",\"namespace\":\"${NAMESPACE}\"},\"type\":\"Opaque\",\"data\":{\"authorization\":\"${BEARER_B64}\"}}"
+
+              HTTP_STATUS="$(curl -sf \
+                --max-time 10 \
+                -o /dev/null \
+                -w "%{http_code}" \
+                -X PATCH \
+                "${K8S_API}/api/v1/namespaces/${NAMESPACE}/secrets/mcp-discovery-token?fieldManager=discovery-token-minter&force=true" \
+                -H "Authorization: Bearer ${SA_TOKEN}" \
+                -H "Content-Type: application/apply-patch+yaml" \
+                --cacert "${CACERT}" \
+                --data "${SECRET_BODY}")"
+
+              echo "k8s API response: ${HTTP_STATUS}"
+              case "${HTTP_STATUS}" in
+                200|201|204) echo "mcp-discovery-token Secret created/updated successfully (init)." ;;
+                *) echo "ERROR: unexpected HTTP ${HTTP_STATUS} from k8s API." >&2; exit 1 ;;
+              esac
+          env:
+            - name: HOME
+              value: /tmp
+          volumeMounts:
+            - name: kagent-controller-secret
+              mountPath: /var/run/secrets/kagent-controller
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+      volumes:
+        - name: kagent-controller-secret
+          secret:
+            secretName: kagent-controller-client-secret

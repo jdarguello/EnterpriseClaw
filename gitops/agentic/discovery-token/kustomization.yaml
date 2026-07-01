@@ -1,0 +1,52 @@
+# GitOps-native mcp-discovery-token minter for platform-agent's RemoteMCPServers.
+#
+# PROBLEM SOLVED
+# --------------
+# kagent resolves `RemoteMCPServer.headersFrom` Secret refs at compile time. When Secret
+# `mcp-discovery-token` (ns kagent, key `authorization` = "Bearer <jwt>") is absent, BOTH
+# RemoteMCPServers (`github-issues`, `infra-provisioning`) fail to compile and platform-agent
+# never reaches READY — killing the demo's action path. This directory provisions the Secret
+# automatically so Argo re-creates it on every stack cycle with zero manual steps.
+#
+# HOW IT WORKS
+# ------------
+# 1. An ExternalSecret pulls the kagent-controller Keycloak client secret from SM `keycloak-internal`
+#    (property `kagent-controller-client-secret`) into k8s Secret `kagent-controller-client-secret`.
+# 2. A CronJob (every 4 min) mints a fresh client_credentials JWT from the in-cluster Keycloak
+#    service (http://keycloak.keycloak.svc/realms/enterpriseclaw) using that client secret and
+#    writes it into Secret `mcp-discovery-token`. In-cluster URL is mandatory: Keycloak reflects
+#    the request Host into `iss`, which must match the agentgateway policy issuer byte-for-byte.
+# 3. A PostSync bootstrap Job fires immediately on first Argo sync so the Secret exists within
+#    seconds of deployment rather than waiting ≤4 min for the first CronJob trigger.
+# 4. A dedicated ServiceAccount + Role + RoleBinding (least-priv: get/create/update secrets in
+#    ns kagent only) gives the pods the k8s rights to write the Secret via the in-pod API.
+#
+# SYNC-WAVE ORDERING (resources within this Application)
+# -------------------------------------------------------
+# wave 0: ExternalSecret + ServiceAccount + Role + RoleBinding
+# wave 1: CronJob + bootstrap Job (PostSync hook)
+#
+# ONBOARDING
+# ----------
+# The `agentic` ApplicationSet (gitops/agentic-appset.yaml) globs `gitops/agentic/*` and creates
+# one Application per directory. This directory onboards automatically as Application
+# `agentic-discovery-token` (no appset change required). It runs at the same sync-wave-2 parent
+# as all other agentic-* Applications.
+#
+# CROSS-REPO DEPENDENCY
+# ---------------------
+# The `kagent-controller` Keycloak realm client must exist in the `enterpriseclaw` realm with:
+#   - serviceAccountsEnabled: true   (enables client_credentials)
+#   - audience mappers: issue-tracker + infra-provisioner
+#   - service-account client-roles: issue:create (on issue-tracker), db:provision:dev (on infra-provisioner)
+# This is a Session-Broker repo concern (keycloak-config-cli realm config). If absent, the Job
+# will log `ERROR: Keycloak returned an error: {"error":"invalid_client",...}` and exit 1 (retries
+# via backoffLimit; visible in the Argo CD pod logs). This side is built and ready regardless.
+# The client was proven on the dry-run VM 2026-06-26 (CLAUDE.md §2.2 end-to-end item).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kagent
+resources:
+  - external-secret-kagent-controller.yaml
+  - rbac.yaml
+  - cronjob.yaml
