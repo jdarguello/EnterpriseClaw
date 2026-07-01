@@ -1,8 +1,10 @@
 # RBAC for the mcp-discovery-token minter.
 #
 # Principle of least privilege: the ServiceAccount `discovery-token-minter` is granted ONLY
-# create/update/get on Secrets in ns `kagent`. It can read `kagent-controller-client-secret`
+# get/create/update/patch on Secrets in ns `kagent`. It can read `kagent-controller-client-secret`
 # (the client secret ESO wrote) and write/update `mcp-discovery-token` (the JWT the CronJob mints).
+# `patch` is REQUIRED because the minter writes via server-side apply (HTTP PATCH,
+# Content-Type application/apply-patch+yaml); without it the write 403s and `curl -sf` fails silently.
 # No other verbs, no other resource types, no cluster-wide access.
 #
 # Sync-wave: wave 0 (same wave as the ExternalSecret) — RBAC must exist before the Job/CronJob
@@ -26,7 +28,7 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get", "create", "update"]
+    verbs: ["get", "create", "update", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
