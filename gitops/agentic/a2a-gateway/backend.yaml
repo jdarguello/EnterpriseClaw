@@ -1,0 +1,82 @@
+# AgentgatewayBackend (kind a2a) — declares platform-agent's A2A server as the upstream.
+#
+# platform-agent's a2aConfig (agent.yaml) runs a per-agent A2A server on the pod's HTTP port :8080,
+# exposed as ClusterIP Service `platform-agent.kagent:8080` (per crds.md "Reaching a Declarative
+# agent over A2A"). The A2A JSON-RPC endpoint is the pod's base URL (no path suffix — the agent
+# serves at `/`; the Workflow calls `message/send` as JSON-RPC).
+#
+# === CRD SHAPE UNCERTAINTY (A2A backend — verify on the live cluster) ===========================
+#
+# The installed AgentgatewayBackend CRD (agentgateway.dev/v1alpha1 @ 1.3.1) is well-documented
+# for `spec.mcp` (proven in dry-run, crds.md) and `spec.ai` (proven in llm-gateway/backend.yaml).
+# The `spec.a2a` sub-resource is documented in the STANDALONE config as:
+#
+#   backends: [{ host: "kagent-agent.kagent.svc.cluster.local:8080" }]
+#   policies: { a2a: {} }    # marks the route as A2A-protocol-aware
+#
+# By analogy with `spec.mcp.targets[].static.{backendRef.name, port, path, protocol}` and
+# `spec.ai.provider.bedrock`, the Kubernetes CRD a2a shape is MOST LIKELY one of:
+#
+# Option A (parallel to mcp — most likely):
+#   spec:
+#     a2a:
+#       targets:
+#         - name: platform-agent
+#           static:
+#             backendRef:
+#               name: platform-agent
+#             port: 8080
+#
+# Option B (simpler top-level backendRef form):
+#   spec:
+#     a2a:
+#       backendRef:
+#         name: platform-agent
+#         port: 8080
+#
+# Option C (host string, mapping the standalone form directly):
+#   spec:
+#     a2a:
+#       host: "platform-agent.kagent.svc.cluster.local:8080"
+#
+# This file encodes Option A. VERIFICATION COMMAND (run on the live cluster after Argo syncs
+# the agentgateway-crds Application):
+#
+#   kubectl explain agentgatewaybackend.spec.a2a
+#   kubectl explain agentgatewaybackend.spec.a2a.targets.static
+#
+# If the CRD does not have `spec.a2a.targets`, check:
+#   kubectl explain agentgatewaybackend.spec.a2a
+# and switch to Option B or C as indicated. Then patch this file accordingly.
+#
+# The AgentgatewayBackend will report `Accepted=False` (check `kubectl get agentgatewaybackend -n
+# kagent`) if the shape is wrong — that is the signal to switch options. It does NOT affect the
+# Gateway or HTTPRoute being programmed; only the upstream resolution is wrong until corrected.
+#
+# `backend.auth.passthrough: {}` IS SET HERE — see reasoning in policies.yaml.
+# ================================================================================================
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: platform-agent-a2a-backend
+  namespace: kagent
+spec:
+  # Best-inference shape for A2A backend (Option A — verify with kubectl explain, see header above)
+  a2a:
+    targets:
+      - name: platform-agent
+        static:
+          backendRef:
+            name: platform-agent    # the platform-agent ClusterIP Service (same namespace)
+          port: 8080
+          # No `path` field — the A2A JSON-RPC endpoint is the pod base URL (`/`);
+          # the /platform-agent prefix is stripped by the HTTPRoute URLRewrite filter
+          # (see httproute.yaml) before the request hits this backend.
+  # PASSTHROUGH — forward the validated user bearer to platform-agent so it can propagate it
+  # onward via allowedHeaders: ["Authorization"] to the downstream MCP-gateway hop.
+  # This differs from mcp-gateway backends (where passthrough is OFF because the user JWT stops
+  # at the MCP waypoint — GitHub-side auth is the MCP's own github-creds token).
+  # See detailed reasoning in policies.yaml.
+  policies:
+    auth:
+      passthrough: {}

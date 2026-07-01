@@ -22,6 +22,24 @@
 #
 # RBAC: the Sensor runs as ns-default SA, which clusterrolebinding.yaml binds to ClusterRole
 # `admin`, so it may create Workflows in ns `argo` (same path the github-push sensor uses).
+#
+# WORKFLOW DAG — triage-first branching (Task C, 2026-07-01):
+#
+#   main (DAG)
+#   ├── log           busybox audit echo (always; independent)
+#   ├── triage        A2A → general-classifier → {"category":"read-only"|"action",...}
+#   ├── read          when category==read-only  → A2A → github-reader → reply
+#   ├── resolve       when category==action     → broker /identity/resolve → {has_token, token}
+#   ├── login         when resolve.has_token==false → broker /auth/login/start → reply login URL
+#   └── act           when resolve.has_token==true  → A2A via agentgateway (Bearer JWT) → reply
+#
+# Exit handler `error-reply` fires when workflow.status != Succeeded so a crash never silently hangs
+# the user (Argo Workflow `onExit`).
+#
+# INJECTION SAFETY: user-controlled text (workflow.parameters.text) is NEVER interpolated into a
+# command/args string. It is always passed as an env var value and read inside the step as $env.*
+# (nushell). The `command: [nu, -c]` override is used for all enterpriseclaw steps so nushell
+# receives the script as a single safe string argument.
 apiVersion: argoproj.io/v1alpha1
 kind: Sensor
 metadata:
@@ -60,6 +78,9 @@ spec:
                 entrypoint: main
                 ttlStrategy:
                   secondsAfterCompletion: 600
+                # Exit handler: if anything fails, post a generic sorry message into the thread.
+                # Needs the channel/ts/thread_ts params so they are declared at workflow scope.
+                onExit: error-reply
                 # These five fields are exactly what the downstream steps consume:
                 #   user           → Workflow Step 0 (Session-Broker /identity/resolve, X-Slack-User-Id)
                 #   text           → the order, forwarded to the agent (A2A message/send)
@@ -72,36 +93,50 @@ spec:
                     - name: ts
                     - name: thread_ts
                 templates:
-                  # DAG: echo the parsed fields (audit/debug) and post a reply into the Slack thread.
-                  # Independent tasks so a log hiccup can't block the actual reply.
+
+                  # ── MAIN DAG ─────────────────────────────────────────────────────────────
                   - name: main
                     dag:
                       tasks:
+                        # Audit echo — independent; a log failure must never block the reply.
                         - name: log
                           template: echo-event
+
+                        # Step 1: triage — A2A DIRECT to general-classifier.
+                        # Output parameter `category` drives all downstream branching.
+                        - name: triage
+                          template: triage-step
+
+                        # Branch A: read-only intent — no auth needed.
+                        - name: read
+                          template: read-step
+                          dependencies: [triage]
+                          when: "'{{tasks.triage.outputs.parameters.category}}' == 'read-only'"
+
+                        # Branch B: action intent — first resolve identity.
+                        - name: resolve
+                          template: resolve-step
+                          dependencies: [triage]
+                          when: "'{{tasks.triage.outputs.parameters.category}}' == 'action'"
+
+                        # Branch B1: no cached token → send login URL.
+                        - name: login
+                          template: login-step
+                          dependencies: [resolve]
+                          when: "'{{tasks.resolve.outputs.parameters.has_token}}' == 'false'"
+
+                        # Branch B2: token present → call platform-agent via agentgateway.
+                        - name: act
+                          template: act-step
                           arguments:
                             parameters:
-                              - { name: text, value: "{{workflow.parameters.text}}" }
-                              - { name: user, value: "{{workflow.parameters.user}}" }
-                              - { name: channel, value: "{{workflow.parameters.channel}}" }
-                              - { name: ts, value: "{{workflow.parameters.ts}}" }
-                              - { name: thread_ts, value: "{{workflow.parameters.thread_ts}}" }
-                        - name: reply
-                          template: slack-reply
-                          arguments:
-                            parameters:
-                              - { name: text, value: "{{workflow.parameters.text}}" }
-                              - { name: channel, value: "{{workflow.parameters.channel}}" }
-                              - { name: ts, value: "{{workflow.parameters.ts}}" }
-                              - { name: thread_ts, value: "{{workflow.parameters.thread_ts}}" }
+                              - name: token
+                                value: "{{tasks.resolve.outputs.parameters.token}}"
+                          dependencies: [resolve]
+                          when: "'{{tasks.resolve.outputs.parameters.has_token}}' == 'true'"
+
+                  # ── TEMPLATE: echo-event (audit/debug) ───────────────────────────────────
                   - name: echo-event
-                    inputs:
-                      parameters:
-                        - name: text
-                        - name: user
-                        - name: channel
-                        - name: ts
-                        - name: thread_ts
                     container:
                       # public.ecr.aws → no Docker Hub pull-rate limit on EKS nodes.
                       image: public.ecr.aws/docker/library/busybox:1.36
@@ -113,70 +148,267 @@ spec:
                           echo "  channel:   $SLACK_CHANNEL"
                           echo "  ts:        $SLACK_TS"
                           echo "  thread_ts: $SLACK_THREAD_TS"
-                          echo "  text:      $SLACK_TEXT"
+                          echo "  text:      [REDACTED — see INJECTION SAFETY note]"
                       env:
-                        - name: SLACK_TEXT
-                          value: "{{inputs.parameters.text}}"
                         - name: SLACK_USER
-                          value: "{{inputs.parameters.user}}"
+                          value: "{{workflow.parameters.user}}"
                         - name: SLACK_CHANNEL
-                          value: "{{inputs.parameters.channel}}"
+                          value: "{{workflow.parameters.channel}}"
                         - name: SLACK_TS
-                          value: "{{inputs.parameters.ts}}"
+                          value: "{{workflow.parameters.ts}}"
                         - name: SLACK_THREAD_TS
-                          value: "{{inputs.parameters.thread_ts}}"
-                  # Reply step — the canonical logic lives in the `main slack reply` CLI command;
-                  # this inline Python mirrors it (json.dumps = safe escaping of arbitrary user text)
-                  # because there is no enterpriseclaw workflow image yet. Bot token mounted from the
-                  # slack-bot ExternalSecret (ns argo); threads under thread_ts, else the message ts.
-                  - name: slack-reply
+                          value: "{{workflow.parameters.thread_ts}}"
+                        # USER_TEXT is available as env but NOT echoed to logs (injection safety).
+                        - name: USER_TEXT
+                          value: "{{workflow.parameters.text}}"
+
+                  # ── TEMPLATE: triage-step ─────────────────────────────────────────────────
+                  # Calls general-classifier (toolless; no MCP permissions; SPIFFE-only).
+                  # Returns outputs.parameters.category = "read-only" | "action".
+                  # Default on ANY failure → "action" (safe: routes to auth, never serves anon).
+                  - name: triage-step
+                    outputs:
+                      parameters:
+                        - name: category
+                          valueFrom:
+                            path: /tmp/category.txt
+                    container:
+                      # Private ECR; nodes pull via IAM (same pattern as git-clone.yaml).
+                      image: 158623290227.dkr.ecr.us-east-1.amazonaws.com/credicorp-enterpriseclaw/enterpriseclaw:v0.1.0
+                      # Nushell multi-word commands invoked WITHOUT `main` prefix.
+                      # USER_TEXT is read via $env.USER_TEXT — NEVER interpolated into the script.
+                      command: [nu, -c]
+                      args:
+                        - |
+                          enterpriseclaw a2a call --url $env.CLASSIFIER_URL --message $env.USER_TEXT --out /tmp/a2a.json
+                          let category = (
+                            try {
+                              open /tmp/a2a.json | get text | from json | get category | str downcase | str trim
+                            } catch {
+                              "action"
+                            }
+                          )
+                          # Validate that we got a known category; default to "action" otherwise.
+                          let safe_category = (
+                            if ($category == "read-only" or $category == "action") {
+                              $category
+                            } else {
+                              "action"
+                            }
+                          )
+                          $safe_category | save --force /tmp/category.txt
+                      env:
+                        - name: CLASSIFIER_URL
+                          value: "http://general-classifier.kagent:8080"
+                        # INJECTION SAFETY: user text arrives only as an env value.
+                        - name: USER_TEXT
+                          value: "{{workflow.parameters.text}}"
+
+                  # ── TEMPLATE: read-step ───────────────────────────────────────────────────
+                  # category==read-only: A2A DIRECT to github-reader (workload rail, no JWT).
+                  # Replies the agent's answer into the Slack thread.
+                  - name: read-step
+                    container:
+                      image: 158623290227.dkr.ecr.us-east-1.amazonaws.com/credicorp-enterpriseclaw/enterpriseclaw:v0.1.0
+                      command: [nu, -c]
+                      args:
+                        - |
+                          # Call github-reader; captures answer into /tmp/read.json.
+                          enterpriseclaw a2a call --url $env.READER_URL --message $env.USER_TEXT --out /tmp/read.json
+                          let answer = (
+                            try {
+                              open /tmp/read.json | get text
+                            } catch {
+                              "I looked into it but could not format the answer. Please try again."
+                            }
+                          )
+                          # Post answer back to the Slack thread.
+                          enterpriseclaw slack reply --channel $env.SLACK_CHANNEL --text $answer --ts $env.SLACK_TS --thread-ts $env.SLACK_THREAD_TS --token $env.SLACK_BOT_TOKEN
+                      env:
+                        - name: READER_URL
+                          value: "http://github-reader.kagent:8080"
+                        - name: USER_TEXT
+                          value: "{{workflow.parameters.text}}"
+                        - name: SLACK_CHANNEL
+                          value: "{{workflow.parameters.channel}}"
+                        - name: SLACK_TS
+                          value: "{{workflow.parameters.ts}}"
+                        - name: SLACK_THREAD_TS
+                          value: "{{workflow.parameters.thread_ts}}"
+                        - name: SLACK_BOT_TOKEN
+                          valueFrom:
+                            secretKeyRef:
+                              name: slack-bot
+                              key: botToken
+
+                  # ── TEMPLATE: resolve-step ────────────────────────────────────────────────
+                  # category==action: call Session-Broker /identity/resolve.
+                  # Exits ZERO even when has_token=false; branch on the VALUE, not step success.
+                  # Writes has_token and token to separate files for output parameters.
+                  # Token is kept in a file, never logged (injection + secret safety).
+                  - name: resolve-step
+                    outputs:
+                      parameters:
+                        - name: has_token
+                          valueFrom:
+                            path: /tmp/has_token.txt
+                        - name: token
+                          valueFrom:
+                            path: /tmp/token.txt
+                    container:
+                      image: 158623290227.dkr.ecr.us-east-1.amazonaws.com/credicorp-enterpriseclaw/enterpriseclaw:v0.1.0
+                      command: [nu, -c]
+                      args:
+                        - |
+                          # broker resolve exits ZERO even when has_token=false — branch on value.
+                          enterpriseclaw broker resolve --url $env.BROKER_URL --slack-user-id $env.SLACK_USER --out /tmp/id.json
+                          let result = (open /tmp/id.json)
+                          let has_token = ($result | get has_token | into string | str downcase)
+                          let token = (
+                            try { $result | get token } catch { "" }
+                          )
+                          $has_token | save --force /tmp/has_token.txt
+                          # Token written to file only; never echoed to stdout/logs.
+                          $token | save --force /tmp/token.txt
+                      env:
+                        - name: BROKER_URL
+                          value: "http://session-broker.session-broker.svc.cluster.local"
+                        - name: SLACK_USER
+                          value: "{{workflow.parameters.user}}"
+
+                  # ── TEMPLATE: login-step ──────────────────────────────────────────────────
+                  # has_token==false: request a login URL and post it to Slack.
+                  # Privileged action requires Keycloak auth → broker /auth/login/start.
+                  - name: login-step
+                    container:
+                      image: 158623290227.dkr.ecr.us-east-1.amazonaws.com/credicorp-enterpriseclaw/enterpriseclaw:v0.1.0
+                      command: [nu, -c]
+                      args:
+                        - |
+                          enterpriseclaw broker login-start --url $env.BROKER_URL --slack-user-id $env.SLACK_USER --out /tmp/login.json
+                          let login_url = (open /tmp/login.json | get login_url)
+                          let reply_text = $"To perform this action I need to verify your identity. Please sign in: ($login_url)"
+                          enterpriseclaw slack reply --channel $env.SLACK_CHANNEL --text $reply_text --ts $env.SLACK_TS --thread-ts $env.SLACK_THREAD_TS --token $env.SLACK_BOT_TOKEN
+                      env:
+                        - name: BROKER_URL
+                          value: "http://session-broker.session-broker.svc.cluster.local"
+                        - name: SLACK_USER
+                          value: "{{workflow.parameters.user}}"
+                        - name: SLACK_CHANNEL
+                          value: "{{workflow.parameters.channel}}"
+                        - name: SLACK_TS
+                          value: "{{workflow.parameters.ts}}"
+                        - name: SLACK_THREAD_TS
+                          value: "{{workflow.parameters.thread_ts}}"
+                        - name: SLACK_BOT_TOKEN
+                          valueFrom:
+                            secretKeyRef:
+                              name: slack-bot
+                              key: botToken
+
+                  # ── TEMPLATE: act-step ────────────────────────────────────────────────────
+                  # has_token==true: A2A VIA agentgateway to platform-agent (Bearer = user JWT).
+                  # Token arrives via inputs.parameters.token (from resolve outputs.parameters.token).
+                  # NOTE: platform-agent is currently NOT Ready (mcp-discovery-token Secret missing).
+                  # This branch goes live once that Secret is provisioned (separate task).
+                  - name: act-step
                     inputs:
                       parameters:
-                        - name: text
-                        - name: channel
-                        - name: ts
-                        - name: thread_ts
+                        - name: token
+                    container:
+                      image: 158623290227.dkr.ecr.us-east-1.amazonaws.com/credicorp-enterpriseclaw/enterpriseclaw:v0.1.0
+                      command: [nu, -c]
+                      args:
+                        - |
+                          # A2A call to platform-agent via agentgateway (JWT on the wire).
+                          # exitcode != 0 → agentgateway rejected the token (401/403/5xx/transport).
+                          enterpriseclaw a2a call --url $env.ACTION_URL --message $env.USER_TEXT --token $env.USER_JWT --out /tmp/act.json
+                          let answer = (
+                            try {
+                              open /tmp/act.json | get text
+                            } catch {
+                              "The agent completed the task but I could not parse its response."
+                            }
+                          )
+                          enterpriseclaw slack reply --channel $env.SLACK_CHANNEL --text $answer --ts $env.SLACK_TS --thread-ts $env.SLACK_THREAD_TS --token $env.SLACK_BOT_TOKEN
+                      env:
+                        - name: ACTION_URL
+                          value: "http://agentic-a2a-gw.kagent:8080/platform-agent"
+                        - name: USER_TEXT
+                          value: "{{workflow.parameters.text}}"
+                        # Token from resolve output — kept in env, never echoed or logged.
+                        - name: USER_JWT
+                          value: "{{inputs.parameters.token}}"
+                        - name: SLACK_CHANNEL
+                          value: "{{workflow.parameters.channel}}"
+                        - name: SLACK_TS
+                          value: "{{workflow.parameters.ts}}"
+                        - name: SLACK_THREAD_TS
+                          value: "{{workflow.parameters.thread_ts}}"
+                        - name: SLACK_BOT_TOKEN
+                          valueFrom:
+                            secretKeyRef:
+                              name: slack-bot
+                              key: botToken
+
+                  # ── TEMPLATE: error-reply (onExit handler) ────────────────────────────────
+                  # Fires when workflow.status != Succeeded (any unhandled failure).
+                  # Posts a generic apology into the Slack thread so the user is never left hanging.
+                  # Uses inline Python (same pattern as the original reply step) so this handler has
+                  # no dependency on the enterpriseclaw image being pullable (image-pull failure
+                  # is itself a common crash reason; a second image pull for the exit handler would
+                  # be equally likely to fail). busybox curl is not reliable for JSON+auth; Python
+                  # slim is the safe universal fallback here.
+                  - name: error-reply
                     container:
                       image: public.ecr.aws/docker/library/python:3.12-slim
                       command: [python3, -c]
                       args:
                         - |
-                          import json, os, re, urllib.request
+                          import json, os, urllib.request
+                          # Only post if the workflow actually failed — onExit fires for all exits.
+                          status = os.environ.get("WORKFLOW_STATUS", "")
+                          if status == "Succeeded":
+                              print("Workflow succeeded; skipping error-reply.")
+                              raise SystemExit(0)
                           token = os.environ["SLACK_BOT_TOKEN"]
-                          channel = os.environ["SLACK_CHANNEL"]
+                          channel = os.environ.get("SLACK_CHANNEL", "")
                           ts = os.environ.get("SLACK_TS", "")
                           thread = os.environ.get("SLACK_THREAD_TS", "") or ts
-                          raw = os.environ.get("USER_TEXT", "")
-                          clean = re.sub(r"^\s*<@[^>]+>\s*", "", raw).strip() or "(empty)"
-                          reply = ":wave: On it! I received your request:\n> %s\n\nThe EnterpriseClaw GitOps pipeline picked it up - agent reasoning + PR are next." % clean
+                          reply = (
+                              ":warning: Something went wrong while processing your request. "
+                              "Please try again or contact your platform team."
+                          )
                           body = {"channel": channel, "text": reply}
                           if thread:
                               body["thread_ts"] = thread
                           req = urllib.request.Request(
                               "https://slack.com/api/chat.postMessage",
                               data=json.dumps(body).encode(),
-                              headers={"Authorization": "Bearer " + token,
-                                       "Content-Type": "application/json; charset=utf-8"},
-                              method="POST")
+                              headers={
+                                  "Authorization": "Bearer " + token,
+                                  "Content-Type": "application/json; charset=utf-8",
+                              },
+                              method="POST",
+                          )
                           with urllib.request.urlopen(req, timeout=15) as r:
                               resp = json.load(r)
-                          print("chat.postMessage ok=%s error=%s ts=%s" % (resp.get("ok"), resp.get("error"), resp.get("ts")))
-                          if not resp.get("ok"):
-                              raise SystemExit("reply failed: " + str(resp.get("error")))
+                          print("error-reply ok=%s error=%s" % (resp.get("ok"), resp.get("error")))
                       env:
+                        - name: WORKFLOW_STATUS
+                          value: "{{workflow.status}}"
                         - name: SLACK_BOT_TOKEN
                           valueFrom:
                             secretKeyRef:
                               name: slack-bot
                               key: botToken
                         - name: SLACK_CHANNEL
-                          value: "{{inputs.parameters.channel}}"
+                          value: "{{workflow.parameters.channel}}"
                         - name: SLACK_TS
-                          value: "{{inputs.parameters.ts}}"
+                          value: "{{workflow.parameters.ts}}"
                         - name: SLACK_THREAD_TS
-                          value: "{{inputs.parameters.thread_ts}}"
-                        - name: USER_TEXT
-                          value: "{{inputs.parameters.text}}"
+                          value: "{{workflow.parameters.thread_ts}}"
+
           # gjson paths into the dispatched inner event (NO `body` wrapper for the Slack source).
           # thread_ts carries a `value:` default so an empty/absent thread (top-level mention) can't
           # fail param resolution and wedge the trigger.

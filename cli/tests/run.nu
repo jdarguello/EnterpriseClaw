@@ -13,6 +13,8 @@ source service-mesh.test.nu
 source external-secrets.test.nu
 source bedrock-irsa.test.nu
 source slack.test.nu
+source a2a.test.nu
+source broker.test.nu
 
 def main [] {
     let suites = [
@@ -24,6 +26,8 @@ def main [] {
         { name: "external-secrets", tests: (external-secrets-tests) }
         { name: "bedrock-irsa", tests: (bedrock-irsa-tests) }
         { name: "slack", tests: (slack-tests) }
+        { name: "a2a", tests: (a2a-tests) }
+        { name: "broker", tests: (broker-tests) }
     ]
 
     mut total = 0

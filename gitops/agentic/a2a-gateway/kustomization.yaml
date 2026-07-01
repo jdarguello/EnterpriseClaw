@@ -1,0 +1,21 @@
+# A2A ingress waypoint — synced as Application `agentic-a2a-gateway` by the `agentic` ApplicationSet
+# (gitops/agentic-appset.yaml; globs gitops/agentic/* → Application agentic-{path.basename}).
+# All resources land in ns `kagent` (kagent controller WATCH_NAMESPACES=kagent).
+#
+#   gateway.yaml    the agentgateway proxy (Gateway class agentgateway → Service agentic-a2a-gw:8080)
+#   backend.yaml    platform-agent's A2A server as an AgentgatewayBackend (kind a2a + passthrough)
+#   httproute.yaml  /platform-agent → strip prefix → forward to A2A backend
+#   policies.yaml   Strict Keycloak-JWT validation + admission-level authorization
+#
+# Prereqs (NOT committed — provision before first sync):
+#   None beyond the kagent-trio install (the agentgateway controller is required to program the
+#   Gateway and HTTRoute). The policy resolves the Keycloak JWKS remotely at runtime; Keycloak
+#   must be reachable from the cluster (session-broker stack, gitops/helm/security in private repo).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kagent
+resources:
+  - gateway.yaml
+  - backend.yaml
+  - httproute.yaml
+  - policies.yaml

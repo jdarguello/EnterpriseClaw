@@ -49,7 +49,9 @@ def "a2a build-tasks-get" [
 
 # --- PURE: join the `text` parts of a parts[] array into one string --------------------------------
 def "a2a text-of-parts" [parts: any] {
-    if ($parts | describe | str starts-with "list") {
+    let d = ($parts | describe)
+    # A list of records describes as `table<...>`; a heterogeneous/empty list as `list<...>`.
+    if (($d | str starts-with "list") or ($d | str starts-with "table")) {
         $parts
         | where {|p| ($p | get -i kind | default "") == "text" }
         | each {|p| ($p | get -i text | default "") }
@@ -72,7 +74,7 @@ def "a2a parse-response" [reply: any] {
     # 1. JSON-RPC transport/protocol error object
     let err = ($reply | get -i error)
     if ($err != null) {
-        let code = ($err | get -i code | default -32000)
+        let code = ($err | get -i code | default (-32000))
         let msg = ($err | get -i message | default "A2A JSON-RPC error")
         return { ok: false, error: $msg, status: $code }
     }
@@ -139,7 +141,7 @@ def "a2a parse-response" [reply: any] {
         return { ok: true, text: $sm_text }
     }
 
-    { ok: false, error: $"A2A task returned no extractable text (state=($state))", status: -32003 }
+    { ok: false, error: $"A2A task returned no extractable text \(state: ($state))", status: -32003 }
 }
 
 # --- PURE: normalize an http error into the failure output shape ----------------------------------
@@ -156,7 +158,7 @@ def "a2a emit" [result: record, out: string] {
         if ($result.ok) {
             { text: $result.text }
         } else {
-            { error: ($result | get -i error | default "unknown"), status: ($result | get -i status | default -1) }
+            { error: ($result | get -i error | default "unknown"), status: ($result | get -i status | default (-1)) }
         }
     )
     let json = ($payload | to json)

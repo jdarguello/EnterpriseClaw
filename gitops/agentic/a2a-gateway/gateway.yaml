@@ -1,0 +1,34 @@
+# A2A INGRESS GATEWAY — the L7 enforcement point at the front door of platform-agent.
+#
+# This Gateway provisions an agentgateway data-plane proxy (Deployment + Service named
+# `agentic-a2a-gw` in ns `kagent`). The Workflow's CLI A2A client posts `message/send` to
+# http://agentic-a2a-gw.kagent:8080/platform-agent; agentgateway validates the Keycloak user
+# JWT before the request ever reaches platform-agent.
+#
+# Scope: ONE agent (platform-agent) behind ONE listener. Separation of concerns:
+#   mcp-gateway  = MCP federation in front of the write MCPs (github-issues, infra-provisioning)
+#   a2a-gateway  = A2A ingress in front of platform-agent (the authenticated action agent only)
+#
+# Mesh note: mesh-less here mirrors the dry-run, which isolated the L7/JWT variable without Istio
+# confounders. Production meshes this proxy as the Istio ambient L7 waypoint via
+# `istio.autoEnabled: true` (set on the agentgateway Helm install — gitops/helm/agents/agentgateway).
+# If autoEnabled blocks readiness on first deploy (istiod not yet injecting), opt out on just this
+# gateway with an AgentgatewayParameters:
+#   apiVersion: agentgateway.dev/v1alpha1
+#   kind: AgentgatewayParameters
+#   metadata: { name: agentic-a2a-gw, namespace: kagent }  # name must match the Gateway
+#   spec: { istio: { enabled: false } }
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: agentic-a2a-gw
+  namespace: kagent
+spec:
+  gatewayClassName: agentgateway
+  listeners:
+    - name: http
+      port: 8080
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same

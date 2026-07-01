@@ -1,0 +1,114 @@
+# ============================================================================================
+# A2A INGRESS AUTH POLICY — the front door for platform-agent.
+# ============================================================================================
+# This policy validates the Keycloak user JWT at the A2A ingress (the Workflow → platform-agent
+# hop). It is the UNPROVEN hop of the EnterpriseClaw demo (the mcp-gateway policies.yaml covers
+# the already-proven Workflow→agentgateway→MCP path; this covers the Workflow→agentgateway→A2A
+# path where the A2A hop has not yet been exercised with real JWT validation).
+#
+# == TWO LEVELS OF 403 (by design) ============================================================
+# 1. THIS POLICY (A2A ingress) — bad/expired/forged/absent token → 401/403 from agentgateway
+#    BEFORE the request reaches platform-agent at all. The Workflow catches this and posts
+#    "please re-login" (or "your session expired") back to Slack.
+# 2. mcp-gateway/policies.yaml (MCP hop) — valid token but insufficient capability scope →
+#    403 from the MCP-gateway waypoint INSIDE platform-agent's tool call. The agent catches
+#    the 403 response from the MCP and reports it cleanly ("you are not authorized for that
+#    action — a more privileged role is required") per the platform-agent systemMessage.
+# The model is NOT in either of these authorization loops — the mesh decides.
+#
+# == AUDIENCE CHOICE (enterpriseclaw-agents) ==================================================
+# §2.2 decided a "single broad audience" at the A2A ingress ("e.g. 'the agents'"). The MCP-
+# gateway policies use per-MCP resource-client audiences (`issue-tracker`, `infra-provisioner`)
+# because each MCP is a distinct resource server in Keycloak. The A2A ingress is the FRONT DOOR
+# for any authenticated user invoking the platform-agent; the claim-gating for specific MCPs
+# happens downstream at mcp-gateway. So the audience here should be the broad agent-tier audience
+# that any human caller of the agent carries.
+#
+# From jwt-propagation.md stage-B dry-run: the test realm used audience `enterpriseclaw-agents`
+# (the `dryrun-cli` confidential client's audience mapper produced this in the access token).
+# Confirmed: the Workflow's CLI A2A client will obtain a token from the session-broker/Keycloak
+# with audience `enterpriseclaw-agents` for the broad agent-call use case. Use this audience.
+#
+# == AUTHORIZATION (admission-level only) =====================================================
+# The A2A ingress job is: reject bad/expired/forged/absent tokens (401/403), admit ANY valid
+# authenticated user. Per-capability gating is DOWNSTREAM at mcp-gateway. So the authorization
+# expression here must accept any token that passed validation — i.e. any token with a `sub`
+# claim (which all valid JWTs carry, including Keycloak's). We do NOT re-implement the per-MCP
+# scope check here.
+#
+# `has(jwt.sub)` is the minimal guard: `Strict` mode alone would 401 tokenless/forged, but the
+# `authorization` block must also be present (Strict populates `jwt.*` but does not itself gate
+# on claims — you need both blocks at `traffic` level per crds.md gotcha #2). The expression
+# `has(jwt.sub)` matches ANY valid validated token (every Keycloak access token has a `sub`).
+#
+# Alternatively, gate on the realm-level `agent-user` role that all users who should reach the
+# platform-agent hold in Keycloak (`'"agent-user" in jwt.realm_access.roles'`). That is slightly
+# tighter and matches the demo narrative (alice/juan both hold `agent-user`; an entirely foreign
+# identity that somehow got a valid token would be blocked). Either is correct for the POC.
+# `has(jwt.sub)` is chosen here as the safest fallback if realm roles haven't been minted yet
+# in the test environment, with a comment showing the role-gate variant.
+#
+# == PASSTHROUGH = ON (critical — differs from mcp-gateway) ===================================
+# mcp-gateway/policies.yaml leaves `backend.auth.passthrough` OFF because the user JWT stops at
+# the MCP-gateway waypoint — GitHub-side auth is the MCP's own `github-creds` token, so the user
+# JWT does NOT need to continue past the MCP gateway (two separate auth rails: user JWT gates
+# access, bot token authenticates to GitHub).
+#
+# HERE, at the A2A INGRESS, the situation is different: platform-agent MUST receive the user
+# bearer to propagate it onward via `allowedHeaders: ["Authorization"]` on its tool refs. Without
+# the bearer, platform-agent cannot forward it to the mcp-gateway hop — and without it on the
+# wire at the mcp-gateway, the user JWT claim-gating has nothing to validate, breaking the
+# downstream authorization.
+#
+# Per crds.md gotcha #6 / jwt-propagation.md: "under active `jwtAuthentication` the validated
+# bearer is CONSUMED at the gateway ... `backend.auth.passthrough` is the documented lever to
+# re-forward it." The `passthrough` is on the AgentgatewayBackend (backend.yaml spec.policies.auth)
+# not on this policy, but the reasoning belongs here for discoverability.
+#
+# == SHAPE (mirrors the proven mcp-gateway pattern exactly) ===================================
+# Same proven pattern: jwtAuthentication + authorization both under `traffic`, attached to the
+# HTTPRoute (NOT the Gateway — `jwt.*` must be in scope for the CEL, which requires route-level).
+# issuer = `http://keycloak.keycloak.svc/realms/enterpriseclaw` (byte-for-byte, the in-cluster
+# svc form; the external https://... in Session-Broker values.yaml is the PROD hostname — locally
+# the token's `iss` reflects the request Host at mint time; see jwt-propagation.md gotcha #4).
+# ============================================================================================
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: platform-agent-jwt
+  namespace: kagent
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: platform-agent-route
+  traffic:
+    jwtAuthentication:
+      mode: Strict         # REQUIRED: Strict populates jwt.* for the CEL; Permissive does NOT
+                           # (and 401s tokenless/forged — exactly what the A2A ingress needs).
+      providers:
+        - issuer: "http://keycloak.keycloak.svc/realms/enterpriseclaw"
+          audiences: ["enterpriseclaw-agents"]    # the broad agent-tier audience (§2.2 decision)
+          jwks:
+            remote:
+              backendRef:
+                group: ""
+                kind: Service
+                name: keycloak
+                namespace: keycloak
+                port: 80
+              jwksPath: /realms/enterpriseclaw/protocol/openid-connect/certs
+    authorization:
+      action: Allow        # admit requests matching the expression; deny (403) all others
+      policy:
+        matchExpressions:
+          # Minimal admission gate: any valid validated token has a `sub`.
+          # All Keycloak access tokens carry `sub` — so this admits every authenticated user
+          # and denies only the corner case of a structurally valid JWT with no `sub` (unlikely).
+          - 'has(jwt.sub)'
+          #
+          # Tighter alternative (recommended once the realm is stable):
+          # Gate on the `agent-user` realm role that all human callers of platform-agent hold.
+          # Alice and Juan both have this role; an unrecognized identity does not.
+          # Uncomment when the Keycloak realm assigns `agent-user` to all platform-agent users:
+          # - '"agent-user" in jwt.realm_access.roles'

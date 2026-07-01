@@ -1,0 +1,39 @@
+# HTTPRoute — routes /platform-agent on the agentic-a2a-gw listener to the A2A backend.
+#
+# The Workflow's A2A client URL is http://agentic-a2a-gw.kagent:8080/platform-agent (the /platform-
+# agent prefix is a routing discriminator; it does NOT exist on the agent's A2A server — the agent
+# serves JSON-RPC at its pod base `/`). A URLRewrite filter strips the prefix before forwarding,
+# so the backend receives the request at `/` (the A2A JSON-RPC root).
+#
+# AgentgatewayPolicy attaches to THIS route (policies.yaml targetRefs) — that is where the Keycloak
+# JWT validation and admission-level authorization live. The policy must be on the HTTPRoute, not the
+# Gateway, so that `jwt.*` is in scope for the CEL (same pattern as the proven mcp-gateway routes).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: platform-agent-route
+  namespace: kagent
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: agentic-a2a-gw
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /platform-agent
+      filters:
+        # Strip the /platform-agent routing prefix before forwarding to the agent's A2A root.
+        # The kagent-managed A2A server serves JSON-RPC at `/` (GET /.well-known/agent-card.json +
+        # POST / for message/send). Without this filter, the upstream would receive `/platform-agent`
+        # which is not a valid A2A path, and the agent would return 404.
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
+      backendRefs:
+        - group: agentgateway.dev
+          kind: AgentgatewayBackend
+          name: platform-agent-a2a-backend

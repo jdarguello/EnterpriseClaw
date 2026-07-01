@@ -32,12 +32,19 @@ RUN apt-get update && \
 # directory, so we preserve the tree under /opt/enterpriseclaw/cli/.
 COPY cli/ /opt/enterpriseclaw/cli/
 
-# Make the entrypoint executable and put it on PATH via a symlink.
+# Make `enterpriseclaw` runnable as a bare command. We use a thin shell wrapper rather than a bare
+# symlink because nushell resolves `source` paths relative to the script's directory at *parse
+# time* using the path it was given — NOT the resolved symlink target. A wrapper that passes the
+# absolute path to `nu` guarantees nushell sees the real location and resolves all relative
+# `source` statements from /opt/enterpriseclaw/cli/ at build/parse time.
 RUN chmod +x /opt/enterpriseclaw/cli/enterpriseclaw && \
-    ln -s /opt/enterpriseclaw/cli/enterpriseclaw /usr/local/bin/enterpriseclaw
+    printf '%s\n' \
+      '#!/bin/sh' \
+      'exec nu /opt/enterpriseclaw/cli/enterpriseclaw "$@"' \
+      > /usr/local/bin/enterpriseclaw && \
+    chmod +x /usr/local/bin/enterpriseclaw
 
 WORKDIR /opt/enterpriseclaw/cli
 
 # Argo Workflow steps call: command: [enterpriseclaw], args: [main, slack, reply, ...]
-# The shebang (#! /usr/bin/env nu) is honoured because nu is on PATH via /usr/local/bin.
 ENTRYPOINT ["enterpriseclaw"]
