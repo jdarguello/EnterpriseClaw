@@ -16,18 +16,16 @@
 #    action — a more privileged role is required") per the platform-agent systemMessage.
 # The model is NOT in either of these authorization loops — the mesh decides.
 #
-# == AUDIENCE CHOICE (enterpriseclaw-agents) ==================================================
-# §2.2 decided a "single broad audience" at the A2A ingress ("e.g. 'the agents'"). The MCP-
-# gateway policies use per-MCP resource-client audiences (`issue-tracker`, `infra-provisioner`)
-# because each MCP is a distinct resource server in Keycloak. The A2A ingress is the FRONT DOOR
-# for any authenticated user invoking the platform-agent; the claim-gating for specific MCPs
-# happens downstream at mcp-gateway. So the audience here should be the broad agent-tier audience
-# that any human caller of the agent carries.
-#
-# From jwt-propagation.md stage-B dry-run: the test realm used audience `enterpriseclaw-agents`
-# (the `dryrun-cli` confidential client's audience mapper produced this in the access token).
-# Confirmed: the Workflow's CLI A2A client will obtain a token from the session-broker/Keycloak
-# with audience `enterpriseclaw-agents` for the broad agent-call use case. Use this audience.
+# == AUDIENCE (unpinned at the A2A door — FIX 2026-07-01) =====================================
+# §2.2 imagined a "single broad audience" (`enterpriseclaw-agents`) at the A2A ingress, and the
+# dry-run's `dryrun-cli` client had an audience mapper producing it. BUT the PROD realm's real
+# login path uses the `session-broker` client, which has NO such mapper — a user token's only
+# audiences are the resource clients it holds roles on (issue-tracker, infra-provisioner), added
+# by the `roles` scope's `oidc-audience-resolve-mapper`. So pinning `enterpriseclaw-agents` here
+# 401'd every real token (InvalidAudience). We UNPIN the audience at this front door (unset = any
+# audience allowed) and rely on `has(jwt.sub)` to admit any valid user; the meaningful per-MCP
+# audience+claim gating is downstream at mcp-gateway. HARDENING: add an `enterpriseclaw-agents`
+# audience mapper to the realm (Session-Broker) and re-pin it here.
 #
 # == AUTHORIZATION (admission-level only) =====================================================
 # The A2A ingress job is: reject bad/expired/forged/absent tokens (401/403), admit ANY valid
@@ -68,9 +66,17 @@
 # == SHAPE (mirrors the proven mcp-gateway pattern exactly) ===================================
 # Same proven pattern: jwtAuthentication + authorization both under `traffic`, attached to the
 # HTTPRoute (NOT the Gateway — `jwt.*` must be in scope for the CEL, which requires route-level).
-# issuer = `http://keycloak.keycloak.svc/realms/enterpriseclaw` (byte-for-byte, the in-cluster
-# svc form; the external https://... in Session-Broker values.yaml is the PROD hostname — locally
-# the token's `iss` reflects the request Host at mint time; see jwt-propagation.md gotcha #4).
+# issuer = the EXTERNAL Keycloak hostname `https://auth.enterprise-claw.io/realms/enterpriseclaw`.
+# THIS IS THE FIX (2026-07-01): real login-wall user tokens are minted via the browser auth-code
+# flow through the tenant host, so Keycloak (KC_HOSTNAME_URL pinned) stamps `iss` = the external
+# URL. The dry-run used the in-cluster `http://keycloak.keycloak.svc/...` form because those test
+# tokens were minted in-cluster; that value 401'd real user tokens with `Error(InvalidIssuer)`
+# (jwt-propagation gotcha #4). The A2A route ONLY ever sees user tokens (external iss), so it uses
+# the external issuer ALONE (unlike the MCP routes, which also see internal-iss discovery tokens
+# and therefore list BOTH issuers — see mcp-gateway/policies.yaml).
+# TENANT VALUE: `auth.enterprise-claw.io` is this tenant's domain — parameterize from `$domain_name`
+# before the OSS release (the JWKS backendRef stays the in-cluster svc; only the `issuer` STRING is
+# compared to the token's `iss`, so it can be external while keys are fetched in-cluster).
 # ============================================================================================
 apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayPolicy
@@ -87,8 +93,11 @@ spec:
       mode: Strict         # REQUIRED: Strict populates jwt.* for the CEL; Permissive does NOT
                            # (and 401s tokenless/forged — exactly what the A2A ingress needs).
       providers:
-        - issuer: "http://keycloak.keycloak.svc/realms/enterpriseclaw"
-          audiences: ["enterpriseclaw-agents"]    # the broad agent-tier audience (§2.2 decision)
+        - issuer: "https://auth.enterprise-claw.io/realms/enterpriseclaw"
+          # audiences: OMITTED (unset = any audience allowed). Real login tokens (session-broker
+          # client) carry no `enterpriseclaw-agents` aud — pinning it 401'd every token
+          # (InvalidAudience). `has(jwt.sub)` below is the "any valid user" gate; per-MCP audience
+          # gating is downstream at mcp-gateway. See the AUDIENCE note above.
           jwks:
             remote:
               backendRef:

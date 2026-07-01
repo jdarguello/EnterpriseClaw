@@ -13,10 +13,20 @@
 #   - The validated user JWT is CONSUMED at the gateway (no backend.auth.passthrough) — correct for
 #     the POC: the user JWT governs WHETHER the human may reach the MCP; it does NOT continue to
 #     GitHub (GitHub-side auth = the MCP's own github-creds bot/App token). Two separate rails.
-#   - issuer/JWKS verified live 2026-06-26: the in-cluster Keycloak stamps
-#     iss=http://keycloak.keycloak.svc/realms/enterpriseclaw (the external https://...example.com in
-#     the Session-Broker values.yaml is the PROD hostname; locally it is the svc form). iss must match
-#     byte-for-byte or validation fails InvalidIssuer.
+#   - issuer: TWO issuers accepted (FIX 2026-07-01). The MCP routes see BOTH token kinds:
+#     (1) the kagent-controller DISCOVERY token (mcp-discovery-token), minted in-cluster →
+#         iss=http://keycloak.keycloak.svc/realms/enterpriseclaw
+#     (2) the forwarded USER token (allowedHeaders:[Authorization] on platform-agent), minted via
+#         the browser login flow through the tenant host →
+#         iss=https://auth.enterprise-claw.io/realms/enterpriseclaw
+#     A single-issuer policy 401'd whichever kind didn't match (Error(InvalidIssuer) — that was the
+#     live failure on the A2A route 2026-07-01). So each policy lists BOTH issuers as providers;
+#     agentgateway validates a token against the provider whose `iss` matches (the A2A route lists
+#     only the external issuer — it never sees discovery tokens). Only the `issuer` STRING is matched;
+#     JWKS is still fetched from the in-cluster keycloak Service, so both providers share one
+#     in-cluster JWKS backendRef (same realm, same signing keys).
+#     TENANT VALUE: `auth.enterprise-claw.io` is this tenant's domain — parameterize from
+#     `$domain_name` before the OSS release.
 #
 # Demo outcome (realm: alice=/engineering [agent-user], juan=/engineering/seniors [+senior-engineer]):
 #   github-issues       -> alice ✅  juan ✅   (both hold issue:create)
@@ -42,8 +52,21 @@ spec:
     jwtAuthentication:
       mode: Strict
       providers:
+        # (1) in-cluster DISCOVERY token (kagent-controller / mcp-discovery-token) — internal iss
         - issuer: "http://keycloak.keycloak.svc/realms/enterpriseclaw"
           audiences: ["issue-tracker"]      # the bearer-only resource client = this MCP's audience
+          jwks:
+            remote:
+              backendRef:
+                group: ""
+                kind: Service
+                name: keycloak
+                namespace: keycloak
+                port: 80
+              jwksPath: /realms/enterpriseclaw/protocol/openid-connect/certs
+        # (2) forwarded USER token (browser login flow via the tenant host) — external iss (FIX 2026-07-01)
+        - issuer: "https://auth.enterprise-claw.io/realms/enterpriseclaw"
+          audiences: ["issue-tracker"]
           jwks:
             remote:
               backendRef:
@@ -74,8 +97,21 @@ spec:
     jwtAuthentication:
       mode: Strict
       providers:
+        # (1) in-cluster DISCOVERY token (kagent-controller / mcp-discovery-token) — internal iss
         - issuer: "http://keycloak.keycloak.svc/realms/enterpriseclaw"
           audiences: ["infra-provisioner"]  # the bearer-only resource client = this MCP's audience
+          jwks:
+            remote:
+              backendRef:
+                group: ""
+                kind: Service
+                name: keycloak
+                namespace: keycloak
+                port: 80
+              jwksPath: /realms/enterpriseclaw/protocol/openid-connect/certs
+        # (2) forwarded USER token (browser login flow via the tenant host) — external iss (FIX 2026-07-01)
+        - issuer: "https://auth.enterprise-claw.io/realms/enterpriseclaw"
+          audiences: ["infra-provisioner"]
           jwks:
             remote:
               backendRef:
