@@ -208,7 +208,16 @@ spec:
                               if ($t | is-empty) { $env.USER_TEXT } else { $t }
                             } catch { $env.USER_TEXT }
                           )
-                          enterpriseclaw a2a call --url $env.CLASSIFIER_URL --message $convo --out /tmp/a2a.json
+                          # The classifier is toolless and must ONLY emit the category JSON, never
+                          # answer/continue the conversation. When $convo is a multi-turn transcript
+                          # that ends mid-clarification (an Assistant turn asking for more info), the
+                          # model can DRIFT into answering — asking the user its own follow-up — instead
+                          # of classifying. That yields NO JSON, which fail-closes to "action" and
+                          # wrongly walls a read behind login. Wrapping the transcript with an explicit
+                          # classify-only directive keeps it on task (verified live across greeting /
+                          # action / answer-follow-up / drift cases → all emit valid category JSON).
+                          let classify_msg = $"You are an intent classifier. Below is a Slack conversation transcript. Classify ONLY the intent of the LAST user message, using earlier turns as context. Do NOT answer, continue, or ask any question. Output ONLY the category JSON.\n\n=== CONVERSATION ===\n($convo)\n=== END ==="
+                          enterpriseclaw a2a call --url $env.CLASSIFIER_URL --message $classify_msg --out /tmp/a2a.json
                           # The classifier is prompted to emit BARE single-line JSON, but Haiku
                           # intermittently wraps it in a ```json ... ``` markdown fence (and could add
                           # stray prose). `from json` throws on the fence, which would default us to
