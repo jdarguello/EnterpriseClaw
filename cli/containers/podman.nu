@@ -19,7 +19,9 @@ def --env "containers artifact url" [
     --action-name: string
     --region: string = ""
 ] {
-    let repo_name = $"(containers project)/($action_name)"
+    # ECR repo names are lowercase: the image-registries tofu module creates them as
+    # `${lower(project)}/${lower(name)}`, so lowercase here to match (else the push 404s the repo).
+    let repo_name = ($"(containers project)/($action_name)" | str downcase)
     ecr repo-uri --repo-name=$repo_name --region=$region
 }
 
