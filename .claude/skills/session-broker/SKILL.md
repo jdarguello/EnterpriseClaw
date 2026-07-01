@@ -119,6 +119,17 @@ The Keycloak helm-app **left this repo in `796d38e`**. The agent calls the broke
    it. `google-idp` (Google OAuth `CLIENT_ID`/`CLIENT_SECRET`) must pre-exist in SM for the realm's Google IdP.
    The realm-import Job (`keycloak-config-cli`) only runs once `keycloak-realm-secrets` exists. See
    `reference/enterpriseclaw-integration.md` → "Secret wiring".
+8. **Google-federation login has TWO ordered failure modes (both hit 2026-07-01).** After the login wall posts the
+   Keycloak URL and the user picks "Sign in with Google": **(a) Google `Error 400: redirect_uri_mismatch`** — the
+   Google OAuth client must register the EXACT Keycloak broker callback
+   `https://auth.<domain>/realms/enterpriseclaw/broker/google/endpoint` (the bare root URL and the localhost dev URL
+   do NOT match). **(b) Keycloak "Unexpected error when authenticating with identity provider"** — a **realm IdP-mapper
+   config bug**, not creds/network: Google auth + `code→token` succeed, then Keycloak NPEs applying the realm's Google
+   IdP mappers (`IdentityBrokerService.authenticated … "target" is null`) because a mapper's `identityProviderMapper`
+   type id doesn't resolve. The realm used the invalid `hardcoded-group-idp-mapper`; the correct OIDC id is
+   **`oidc-hardcoded-group-idp-mapper`**. Both fixes + the live-debug recipe (kcadm on the Bitnami image) →
+   `reference/keycloak-debugging.md`. The realm import lives in the **broker repo** (`gitops/keycloak/values.yaml`);
+   a live kcadm patch is reverted by the next broker re-sync unless the source file is also fixed.
 
 ## How EnterpriseClaw installs + exposes it
 
