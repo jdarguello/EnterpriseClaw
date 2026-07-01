@@ -167,6 +167,18 @@ spec:
                   # Returns outputs.parameters.category = "read-only" | "action".
                   # Default on ANY failure → "action" (safe: routes to auth, never serves anon).
                   - name: triage-step
+                    # The classifier is a kagent/ADK agent that INTERMITTENTLY returns an empty A2A
+                    # task in state "input-required" (no extractable text) instead of "completed" —
+                    # a transient ADK turn-completion quirk (observed ~1 in N; usually completes fine).
+                    # That empty turn makes `enterpriseclaw a2a call` exit non-zero (outside the parse
+                    # try/catch) and fail the node → all branches omitted → onExit error-reply. Retrying
+                    # the step re-sends message/send and almost always gets a clean "completed" verdict.
+                    retryStrategy:
+                      limit: "3"
+                      retryPolicy: "Always"
+                      backoff:
+                        duration: "2s"
+                        factor: "2"
                     outputs:
                       parameters:
                         - name: category
@@ -215,6 +227,16 @@ spec:
                   # category==read-only: A2A DIRECT to github-reader (workload rail, no JWT).
                   # Replies the agent's answer into the Slack thread.
                   - name: read-step
+                    # github-reader is also a kagent/ADK agent → same intermittent empty
+                    # "input-required" flakiness as triage. Reads are idempotent, so retry is safe.
+                    # (act-step is intentionally NOT retried — it mutates/opens PRs, so a retry after a
+                    # partial success could double-act; that path is left to fail-closed to error-reply.)
+                    retryStrategy:
+                      limit: "3"
+                      retryPolicy: "Always"
+                      backoff:
+                        duration: "2s"
+                        factor: "2"
                     container:
                       image: 158623290227.dkr.ecr.us-east-1.amazonaws.com/credicorp-enterpriseclaw/enterpriseclaw:v0.1.0
                       command: [nu, -c]
