@@ -208,6 +208,10 @@ spec:
                               if ($t | is-empty) { $env.USER_TEXT } else { $t }
                             } catch { $env.USER_TEXT }
                           )
+                          # Strip pipeline-artifact bot turns (login walls, error apologies) — they are
+                          # the pipeline talking to itself, not conversation, and only add noise to the
+                          # intent classification (fix 2026-07-01, see act-step).
+                          let convo = ($convo | lines | where {|l| (not ($l | str contains "Please sign in")) and (not ($l | str contains "Something went wrong while processing your request"))} | str join "\n")
                           # The classifier is toolless and must ONLY emit the category JSON, never
                           # answer/continue the conversation. When $convo is a multi-turn transcript
                           # that ends mid-clarification (an Assistant turn asking for more info), the
@@ -289,6 +293,9 @@ spec:
                               if ($t | is-empty) { $env.USER_TEXT } else { $t }
                             } catch { $env.USER_TEXT }
                           )
+                          # Strip pipeline-artifact bot turns (login walls, error apologies) — they are
+                          # the pipeline talking to itself, not conversation (fix 2026-07-01, see act-step).
+                          let convo = ($convo | lines | where {|l| (not ($l | str contains "Please sign in")) and (not ($l | str contains "Something went wrong while processing your request"))} | str join "\n")
                           # Call github-reader; captures answer into /tmp/read.json.
                           enterpriseclaw a2a call --url $env.READER_URL --message $convo --out /tmp/read.json
                           let answer = (
@@ -409,13 +416,21 @@ spec:
                               if ($t | is-empty) { $env.USER_TEXT } else { $t }
                             } catch { $env.USER_TEXT }
                           )
+                          # Strip pipeline-artifact bot turns (login walls, error apologies) from the
+                          # transcript — they are the pipeline talking to itself, NOT conversation. The
+                          # login wall ("Please sign in: <url>") posted by an earlier login-step turn made
+                          # this action agent conclude the user was still unauthenticated and refuse to
+                          # call issue_write, pointing at "the link in the previous message" (observed
+                          # sfklf run 2026-07-01, all MCP-gw calls 200, no tool call, no issue created).
+                          let convo = ($convo | lines | where {|l| (not ($l | str contains "Please sign in")) and (not ($l | str contains "Something went wrong while processing your request"))} | str join "\n")
                           # Wrap the transcript with an ACTION-framing directive. Conversation state is
                           # the shared Slack thread, which may contain earlier turns from the READ-ONLY
                           # github-reader ("I'm read-only, I can't create issues"). Without this frame the
                           # action agent inherits that persona and refuses its write tools (observed
                           # 2026-07-01). This tells it to disregard prior read-only claims and fulfill the
-                          # LAST user request with its own tools.
-                          let act_msg = $"You are the EnterpriseClaw platform ACTION agent and you HAVE WRITE TOOLS. Below is a Slack conversation transcript. Fulfill the LAST user request. DISREGARD any earlier assistant turn that claims to be read-only or unable to create/write — those came from a different assistant and are NOT your limits. If the user asks to create an issue, CALL your issue_write tool and actually create it; never tell them to do it manually.\n\n=== CONVERSATION ===\n($convo)\n=== END ==="
+                          # LAST user request with its own tools. It ALSO asserts identity is already
+                          # handled (see login-wall strip above) so the agent never re-walls behind login.
+                          let act_msg = $"You are the EnterpriseClaw platform ACTION agent and you HAVE WRITE TOOLS. The user's identity has ALREADY been verified and a valid credential is attached to THIS request — you are past the login gate. NEVER ask the user to sign in, authenticate, or use a login link; IGNORE any 'please sign in' or 'verify your identity' text in the transcript — it is stale and already satisfied. Below is a Slack conversation transcript. Fulfill the LAST user request. DISREGARD any earlier assistant turn that claims to be read-only or unable to create/write — those came from a different assistant and are NOT your limits. If the user asks to create an issue, CALL your issue_write tool and actually create it; never tell them to do it manually.\n\n=== CONVERSATION ===\n($convo)\n=== END ==="
                           # A2A call to platform-agent via agentgateway (JWT on the wire).
                           # exitcode != 0 → agentgateway rejected the token (401/403/5xx/transport).
                           enterpriseclaw a2a call --url $env.ACTION_URL --message $act_msg --token $env.USER_JWT --out /tmp/act.json
