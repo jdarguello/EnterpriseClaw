@@ -269,8 +269,7 @@ spec:
                   - name: read-step
                     # github-reader is also a kagent/ADK agent → same intermittent empty
                     # "input-required" flakiness as triage. Reads are idempotent, so retry is safe.
-                    # (act-step is intentionally NOT retried — it mutates/opens PRs, so a retry after a
-                    # partial success could double-act; that path is left to fail-closed to error-reply.)
+                    # (act-step now ALSO retries — see its own note for why that is double-act-safe.)
                     retryStrategy:
                       limit: "3"
                       retryPolicy: "Always"
@@ -397,6 +396,24 @@ spec:
                   # ACTION-framing directive (act_msg) so the action agent does NOT inherit the
                   # read-only reader's persona from earlier thread turns.
                   - name: act-step
+                    # RETRY — added 2026-07-01 after a live demo failed here. The kagent/ADK agent
+                    # INTERMITTENTLY ends a turn empty (task state "input-required", no artifact/text)
+                    # instead of "completed" — the same quirk triage/read retry around. Un-retried, that
+                    # empty turn made `a2a call` exit non-zero → act failed → onExit apology, even though
+                    # NOTHING was created (root-caused on the 21:44 run: one LLM round-trip, NO issue_write,
+                    # NO issue — confirmed via agent logs + GitHub issue timestamps).
+                    # WHY THIS IS DOUBLE-ACT-SAFE (the reason it was previously omitted): a retry only
+                    # fires when `a2a call` exits non-zero, and a genuinely SUCCESSFUL action returns a
+                    # "completed" Task with the result artifact → `a2a call` exits 0 → the step SUCCEEDS →
+                    # NO retry. The only turn a retry re-drives is the empty no-op turn, which mutated
+                    # nothing. limit "2" (3 attempts total) bounds the residual (a mutation followed by a
+                    # transport/5xx drop) while making a double-empty-turn failure very unlikely.
+                    retryStrategy:
+                      limit: "2"
+                      retryPolicy: "Always"
+                      backoff:
+                        duration: "2s"
+                        factor: "2"
                     inputs:
                       parameters:
                         - name: token
