@@ -42,6 +42,21 @@ spec:
       destination:
         server: https://kubernetes.default.svc
         namespace: kagent
+      # ESO 0.10.5's GithubAccessToken v1alpha1 CRD schema does NOT include `repositories`
+      # or `permissions`, so both fields are SILENTLY PRUNED on admission (see
+      # gitops/agentic/mcps/generator-github-app-token.yaml header). The live object can
+      # therefore never match git and agentic-mcps sits permanently OutOfSync/Healthy — a
+      # cosmetic diff, not a failure (the token still mints; MCPServers stay Healthy).
+      # Ignore just those two paths so the app reports Synced; the fields stay in git so the
+      # narrowing activates automatically once ESO is upgraded to a CRD that supports them.
+      # Scoped by kind — GithubAccessToken only exists in agentic-mcps, so the other three
+      # generated apps (agents, mcp-gateway, llm-gateway) are unaffected.
+      ignoreDifferences:
+        - group: generators.external-secrets.io
+          kind: GithubAccessToken
+          jsonPointers:
+            - /spec/repositories
+            - /spec/permissions
       syncPolicy:
         automated:
           prune: true
