@@ -38,10 +38,14 @@ controller:
     requests: { cpu: 50m, memory: 128Mi }
     limits:   { cpu: 1,   memory: 512Mi }
   auth:
-    mode: trusted-proxy   # ingest the user JWT from the inbound Authorization header (vs. "unsecure",
-                          # which uses X-User-Id / admin@kagent.dev). Required for the JWT-propagation
-                          # dry-run: kagent must read the bearer before it can forward it to MCP tools.
-    userIdClaim: sub      # JWT claim used as the kagent user id
+    mode: unsecure        # UI/controller REST is open — no oauth2-proxy is deployed ("No SSO on the
+                          # demo UIs", §2.2). NOTE: trusted-proxy is NOT required for JWT->MCP
+                          # propagation — the bearer reaches MCP via the Agent CR's allowedHeaders +
+                          # agentgateway's default MCP passthrough, independent of AUTH_MODE.
+                          # trusted-proxy only gates inbound user-id attribution AND requires an
+                          # oauth2-proxy in front, or the UI 401s on every /api/* call. Flip back to
+                          # trusted-proxy only together with real UI SSO (oauth2-proxy + Keycloak client).
+    userIdClaim: sub      # JWT claim used as the kagent user id (only consulted in trusted-proxy mode)
 
 rbac:
   namespaces: ["kagent"]      # namespaced Role/RoleBinding instead of a cluster-scoped ClusterRole
