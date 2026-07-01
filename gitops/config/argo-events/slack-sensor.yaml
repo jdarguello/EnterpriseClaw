@@ -191,13 +191,24 @@ spec:
                             path: /tmp/category.txt
                     container:
                       # Private ECR; nodes pull via IAM (same pattern as git-clone.yaml).
-                      image: 158623290227.dkr.ecr.us-east-1.amazonaws.com/credicorp-enterpriseclaw/enterpriseclaw:v0.1.0
+                      image: 158623290227.dkr.ecr.us-east-1.amazonaws.com/credicorp-enterpriseclaw/enterpriseclaw:v0.1.1
                       # Nushell multi-word commands invoked WITHOUT `main` prefix.
                       # USER_TEXT is read via $env.USER_TEXT — NEVER interpolated into the script.
                       command: [nu, -c]
                       args:
                         - |
-                          enterpriseclaw a2a call --url $env.CLASSIFIER_URL --message $env.USER_TEXT --out /tmp/a2a.json
+                          # Rebuild the whole Slack thread so a follow-up reply carries its prior turns as
+                          # context (the pipeline is one workflow per message → otherwise the agent sees only
+                          # the latest line). Fall back to the single message if the thread fetch fails
+                          # (e.g. the bot lacks the channels:history scope) so single-turn never regresses.
+                          let convo = (
+                            try {
+                              enterpriseclaw slack thread --channel $env.SLACK_CHANNEL --ts $env.SLACK_TS --thread-ts $env.SLACK_THREAD_TS --token $env.SLACK_BOT_TOKEN --out /tmp/thread.txt
+                              let t = (open /tmp/thread.txt | str trim)
+                              if ($t | is-empty) { $env.USER_TEXT } else { $t }
+                            } catch { $env.USER_TEXT }
+                          )
+                          enterpriseclaw a2a call --url $env.CLASSIFIER_URL --message $convo --out /tmp/a2a.json
                           # The classifier is prompted to emit BARE single-line JSON, but Haiku
                           # intermittently wraps it in a ```json ... ``` markdown fence (and could add
                           # stray prose). `from json` throws on the fence, which would default us to
@@ -224,9 +235,20 @@ spec:
                       env:
                         - name: CLASSIFIER_URL
                           value: "http://general-classifier.kagent:8080"
-                        # INJECTION SAFETY: user text arrives only as an env value.
+                        # INJECTION SAFETY: user text and transcript arrive only as env values / files.
                         - name: USER_TEXT
                           value: "{{workflow.parameters.text}}"
+                        - name: SLACK_CHANNEL
+                          value: "{{workflow.parameters.channel}}"
+                        - name: SLACK_TS
+                          value: "{{workflow.parameters.ts}}"
+                        - name: SLACK_THREAD_TS
+                          value: "{{workflow.parameters.thread_ts}}"
+                        - name: SLACK_BOT_TOKEN
+                          valueFrom:
+                            secretKeyRef:
+                              name: slack-bot
+                              key: botToken
 
                   # ── TEMPLATE: read-step ───────────────────────────────────────────────────
                   # category==read-only: A2A DIRECT to github-reader (workload rail, no JWT).
@@ -243,12 +265,23 @@ spec:
                         duration: "2s"
                         factor: "2"
                     container:
-                      image: 158623290227.dkr.ecr.us-east-1.amazonaws.com/credicorp-enterpriseclaw/enterpriseclaw:v0.1.0
+                      image: 158623290227.dkr.ecr.us-east-1.amazonaws.com/credicorp-enterpriseclaw/enterpriseclaw:v0.1.1
                       command: [nu, -c]
                       args:
                         - |
+                          # Rebuild the whole Slack thread so a follow-up reply carries its prior turns as
+                          # context (the pipeline is one workflow per message → otherwise the agent sees only
+                          # the latest line). Fall back to the single message if the thread fetch fails
+                          # (e.g. the bot lacks the channels:history scope) so single-turn never regresses.
+                          let convo = (
+                            try {
+                              enterpriseclaw slack thread --channel $env.SLACK_CHANNEL --ts $env.SLACK_TS --thread-ts $env.SLACK_THREAD_TS --token $env.SLACK_BOT_TOKEN --out /tmp/thread.txt
+                              let t = (open /tmp/thread.txt | str trim)
+                              if ($t | is-empty) { $env.USER_TEXT } else { $t }
+                            } catch { $env.USER_TEXT }
+                          )
                           # Call github-reader; captures answer into /tmp/read.json.
-                          enterpriseclaw a2a call --url $env.READER_URL --message $env.USER_TEXT --out /tmp/read.json
+                          enterpriseclaw a2a call --url $env.READER_URL --message $convo --out /tmp/read.json
                           let answer = (
                             try {
                               open /tmp/read.json | get text

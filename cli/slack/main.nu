@@ -69,7 +69,15 @@ def "slack thread-transcript" [
     --bot-user-id: string = ""      # bot's own Slack user id (only used to strip its self-mention)
 ] {
     let messages = $in
+    # System/membership events (joins, leaves, topic/purpose changes, etc.) carry a subtype and are
+    # noise for the agent — drop them up front. (Their residual text after mention-stripping, e.g.
+    # "has joined the channel", is non-empty, so the empty-text filter alone would not catch them.)
+    let skip_subtypes = [
+        "channel_join" "channel_leave" "group_join" "group_leave"
+        "channel_topic" "channel_purpose" "channel_name" "channel_archive" "channel_unarchive"
+    ]
     $messages
+    | where (($it | get -i subtype | default "") not-in $skip_subtypes)
     | each {|m|
         let is_bot = (
             (($m | get -i bot_id | default "" | is-not-empty))
