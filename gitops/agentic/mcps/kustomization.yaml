@@ -9,18 +9,26 @@
 # The `agentic` ApplicationSet syncs this directory as the `agentic-mcps` Application.
 #
 # Token materialization strategy (GITHUB_PERSONAL_ACCESS_TOKEN):
-#   - `github-issues-token`   (DYNAMIC, ESO GithubAccessToken generator) — github-issues envFrom it;
-#                              mints a short-lived GitHub App installation token refreshed every 30m.
-#                              Source: generator-github-app-token.yaml + external-secret-github-issues-token.yaml.
-#                              `github-creds` is ALSO envFrom'd alongside it (for App camelCase keys
-#                              used by Argo Events/Workflows) but github-mcp-server reads ONLY the
-#                              recognised GITHUB_PERSONAL_ACCESS_TOKEN from github-issues-token.
-#   - `github-creds`          (static extract from SM `github-creds`) — github-issues + infra-provisioning
-#                              envFrom it. Does NOT carry GITHUB_PERSONAL_ACCESS_TOKEN for github-mcp-server
-#                              (the token comes from github-issues-token for github-issues; infra-provisioning
-#                              will need the same treatment — out of scope for this change).
-#   - `github-readonly-creds` (READ-scoped PAT from SM `github-readonly-token`) — github-readonly envFrom it;
-#                              defines the anonymous blast radius, scoped to read-only repos only.
+#   github-mcp-server reads GITHUB_PERSONAL_ACCESS_TOKEN from ENV once at process start. Delivering
+#   the ESO-minted App installation token via envFrom (a POD-START SNAPSHOT) meant the ~1h token
+#   FROZE at pod start and the pod never re-read the 30m-refreshed Secret → after ~1h every WRITE got
+#   401 Bad credentials (observed 2026-07-01; reads used a separate long-lived PAT so they kept
+#   working). Fix = the `gh-token-proxy` sidecar (proxy.py + configMapGenerator below):
+#     - `github-issues-token`   (DYNAMIC, ESO GithubAccessToken generator, 30m refresh) — mounted as a
+#                                NATIVE `secret` VOLUME (kubelet keeps the file in sync — "Pattern 1")
+#                                into the gh-token-proxy sidecar of BOTH github-issues and
+#                                infra-provisioning. The sidecar reads the token FRESH per request and
+#                                injects it; github-mcp-server points at the sidecar via
+#                                GITHUB_HOST=http://localhost and ships only a dummy env token.
+#                                (ESO 0.10.5 drops the generator's permissions/repositories narrowing,
+#                                so this one installation token carries the App install's full scope —
+#                                enough for both the issues and repos/pull_requests toolsets.)
+#     - `github-creds`          (static SM extract) — still envFrom'd for the App camelCase keys used
+#                                elsewhere; github-mcp-server ignores them and no longer needs a token here.
+#     - `github-readonly-creds` (READ-scoped PAT from SM `github-readonly-token`) — github-readonly
+#                                envFrom it; long-lived, so it needs no proxy. Defines the anon blast radius.
+#   `gh-token-proxy` ConfigMap is generated from proxy.py with a STABLE name (disableNameSuffixHash)
+#   so the MCPServer volumes can reference it by name (kustomize does not rewrite names inside CRDs).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: kagent          # kagent controller WATCH_NAMESPACES=kagent — CRs MUST live here
@@ -32,3 +40,9 @@ resources:
   - github-issues.yaml
   - infra-provisioning.yaml
   - github-readonly.yaml
+generatorOptions:
+  disableNameSuffixHash: true   # stable ConfigMap name — MCPServer CRD volumes reference it by name
+configMapGenerator:
+  - name: gh-token-proxy
+    files:
+      - proxy.py

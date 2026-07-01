@@ -26,8 +26,43 @@ spec:
     port: 3000
     env:
       GITHUB_TOOLSETS: "repos,pull_requests"
+      # Same gh-token-proxy sidecar pattern as github-issues (mcps/proxy.py). NB: this MCP previously
+      # envFrom'd only `github-creds`, which does NOT carry GITHUB_PERSONAL_ACCESS_TOKEN — so it never
+      # had a usable token (it was never green). Routing through the sidecar gives it the same live
+      # ESO-refreshed installation token. NOTE on subdomain-isolation: for the repos toolset,
+      # get_file_contents in RAW mode targets raw.githubusercontent.com (a host proxy.py doesn't map);
+      # the create_branch/create_or_update_file/create_pull_request PR path uses REST /api/v3 +
+      # GraphQL, which the proxy handles.
+      GITHUB_HOST: "http://localhost"
+      GITHUB_PERSONAL_ACCESS_TOKEN: "unused-placeholder-replaced-by-gh-token-proxy"
     secretRefs:
-      - name: github-creds        # -> envFrom; must carry GITHUB_PERSONAL_ACCESS_TOKEN
+      - name: github-creds        # -> envFrom; App camelCase keys (ignored); token now via sidecar
+    sidecars:
+      - name: gh-token-proxy
+        image: public.ecr.aws/docker/library/python:3.12-slim
+        command: ["python3", "-u", "/proxy/proxy.py"]
+        securityContext:
+          runAsUser: 0            # bind :80 (github-mcp-server drops the port -> always calls :80)
+        volumeMounts:
+          - name: proxy-script
+            mountPath: /proxy
+          - name: gh-token
+            mountPath: /creds
+            readOnly: true
+        resources:
+          requests:
+            cpu: "10m"
+            memory: "32Mi"
+          limits:
+            cpu: "100m"
+            memory: "64Mi"
+    volumes:
+      - name: proxy-script
+        configMap:
+          name: gh-token-proxy
+      - name: gh-token
+        secret:
+          secretName: github-issues-token   # shared: ESO token carries the App install's full scope
     resources:
       requests:
         cpu: "50m"

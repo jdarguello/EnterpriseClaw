@@ -37,9 +37,43 @@ spec:
     port: 3000
     env:
       GITHUB_TOOLSETS: "issues"
+      # Route ALL GitHub API calls through the in-pod gh-token-proxy sidecar (mcps/proxy.py). Any
+      # non-github.com/*.ghe.com host is treated as GHES, so http is honored and the port is DROPPED
+      # (url.Hostname()) -> the sidecar MUST listen on :80. The proxy REPLACES the Authorization
+      # header with the CURRENT ESO-refreshed installation token read fresh per request from a native
+      # secret volume, so the token below is a never-used PLACEHOLDER that only satisfies
+      # github-mcp-server's "a token must be present" startup check. This fixes the envFrom-snapshot
+      # 401 (see kustomization.yaml token-strategy note).
+      GITHUB_HOST: "http://localhost"
+      GITHUB_PERSONAL_ACCESS_TOKEN: "unused-placeholder-replaced-by-gh-token-proxy"
     secretRefs:
       - name: github-creds           # -> envFrom; GitHub-App camelCase keys (ignored by github-mcp-server)
-      - name: github-issues-token    # -> envFrom; GITHUB_PERSONAL_ACCESS_TOKEN (ESO-minted App installation token)
+    sidecars:
+      - name: gh-token-proxy
+        image: public.ecr.aws/docker/library/python:3.12-slim
+        command: ["python3", "-u", "/proxy/proxy.py"]
+        securityContext:
+          runAsUser: 0               # bind :80 (github-mcp-server drops the port -> always calls :80)
+        volumeMounts:
+          - name: proxy-script
+            mountPath: /proxy
+          - name: gh-token
+            mountPath: /creds
+            readOnly: true
+        resources:
+          requests:
+            cpu: "10m"
+            memory: "32Mi"
+          limits:
+            cpu: "100m"
+            memory: "64Mi"
+    volumes:
+      - name: proxy-script
+        configMap:
+          name: gh-token-proxy       # generated from proxy.py (kustomization configMapGenerator)
+      - name: gh-token
+        secret:
+          secretName: github-issues-token   # native secret volume — kubelet keeps it synced (Pattern 1)
     resources:
       requests:
         cpu: "50m"
