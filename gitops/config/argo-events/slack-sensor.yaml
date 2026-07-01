@@ -27,11 +27,16 @@
 #
 #   main (DAG)
 #   ├── log           busybox audit echo (always; independent)
-#   ├── triage        A2A → general-classifier → {"category":"read-only"|"action",...}
-#   ├── read          when category==read-only  → A2A → github-reader → reply
+#   ├── triage        rebuilds Slack thread transcript → A2A → general-classifier → {"category":"read-only"|"action",...}
+#   ├── read          when category==read-only  → thread transcript → A2A → github-reader → reply
 #   ├── resolve       when category==action     → broker /identity/resolve → {has_token, token}
 #   ├── login         when resolve.has_token==false → broker /auth/login/start → reply login URL
-#   └── act           when resolve.has_token==true  → A2A via agentgateway (Bearer JWT) → reply
+#   └── act           when resolve.has_token==true  → thread transcript → A2A via agentgateway (Bearer JWT) → reply
+#
+# MULTI-TURN CONTEXT: triage, read, and act steps each call `enterpriseclaw slack thread` to rebuild
+# the full Slack thread as a conversation transcript (User:/Assistant: lines) BEFORE calling the agent.
+# This ensures a follow-up reply ("the owner is jdarguello") carries its prior turns as context rather
+# than being classified/answered in isolation. Falls back to the single message if the fetch fails.
 #
 # Exit handler `error-reply` fires when workflow.status != Succeeded so a crash never silently hangs
 # the user (Argo Workflow `onExit`).
