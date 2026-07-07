@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Architecture & demo spine
+    url: https://github.com/jdarguello/EnterpriseClaw/blob/main/.claude/CLAUDE.md
+    about: The decided ArgoCon architecture (§2.2), current status (§4), and known fragilities (§6). Read before filing.
+  - name: Identity layer (Session-Broker)
+    url: https://github.com/jdarguello/Session-Broker
+    about: For anything touching OAuth, Keycloak, the two identity rails, or the login-wall.

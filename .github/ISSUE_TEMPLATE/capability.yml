@@ -1,0 +1,101 @@
+name: "Capability / Roadmap item"
+description: "A new capability or enhancement on the EnterpriseClaw roadmap."
+title: "[capability] <short summary>"
+labels: ["capability"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for building something new (a roadmap item, a feature, a piece of the
+        demo spine). For something that's broken use **Bug**; for resolving a risky
+        unknown before you commit to a design use **Spike**.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What should exist after this is done, in one or two sentences.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the framework this lands in (maps to the owning specialist).
+      multiple: true
+      options:
+        - cli (Nushell enterpriseclaw)
+        - infra (OpenTofu / AWS)
+        - gitops (Argo CD / Events / Workflows / Crossplane manifests)
+        - actions (vendored action images)
+        - agentic (kagent trio / MCPs / agents)
+        - identity (Session-Broker consumer side / agentgateway authz)
+        - docs
+    validations:
+      required: true
+
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Roadmap phase
+      description: Where this sits relative to the ArgoCon demo (see CLAUDE.md §2.2).
+      options:
+        - P0 — kagent trio + JWT propagation
+        - P1 — kmcp GitHub MCP + PR-open path
+        - P2 — Crossplane XRD/Composition Golden Path
+        - P3 — Slack↔Workflow↔agent + broker Step 0 + login-wall + archive
+        - Post-ArgoCon hardening
+        - Not demo-scoped
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why now, and how it ties to the demo spine / the thesis ("AI proposes, GitOps disposes").
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checklist of observable outcomes that mean "done". Be honest — these gate the "done" claim.
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification plan
+      description: >
+        How we prove it works against a LIVE environment — sandbox, the dry-run UTM VM,
+        or local. Name the commands / signals testing-agent should check. "It compiles"
+        is not verification.
+    validations:
+      required: true
+
+  - type: textarea
+    id: identity_impact
+    attributes:
+      label: Identity / trust-boundary impact
+      description: >
+        Does this touch an identity or trust boundary (a JWT hop, an MCP allow-list, a
+        SPIFFE rail, an authz policy, a new token/secret)? If yes, describe the effect —
+        remember the mesh is the boundary, not the model. If no, say "none".
+      value: "none"
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Risks / open questions / links
+      description: Known fragilities (CLAUDE.md §6), related issues, skills to pull in.
+    validations:
+      required: false

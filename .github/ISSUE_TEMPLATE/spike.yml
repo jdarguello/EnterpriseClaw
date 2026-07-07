@@ -1,0 +1,73 @@
+name: "Spike / de-risk / dry-run"
+description: "Resolve a risky unknown before committing to a design. Timeboxed investigation, not shipping code."
+title: "[spike] <unknown to resolve>"
+labels: ["spike"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is EnterpriseClaw's characteristic move: **decide → dry-run → build → verify.**
+        A spike de-risks the unknown *before* a Capability commits to it. The JWT-propagation
+        dry-run is the archetype — prove the risky hop on a kind/VM cluster first, then build.
+
+  - type: textarea
+    id: unknown
+    attributes:
+      label: Unknown to resolve
+      description: The specific question this spike answers. Phrase it so the answer is checkable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why_risky
+    attributes:
+      label: Why it's risky
+      description: What breaks / how much rework happens if we build on a wrong assumption.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - cli (Nushell enterpriseclaw)
+        - infra (OpenTofu / AWS)
+        - gitops (Argo CD / Events / Workflows / Crossplane manifests)
+        - actions (vendored action images)
+        - agentic (kagent trio / MCPs / agents)
+        - identity (Session-Broker consumer side / agentgateway authz)
+        - docs
+    validations:
+      required: true
+
+  - type: textarea
+    id: dryrun_plan
+    attributes:
+      label: Dry-run plan
+      description: >
+        The cheapest environment that answers the question — kind cluster, the UTM VM,
+        an echo MCP, a throwaway realm. What you'll stand up and what you'll observe.
+    validations:
+      required: true
+
+  - type: textarea
+    id: de_risked
+    attributes:
+      label: Definition of "de-risked"
+      description: The concrete signal that closes this spike (e.g. "bearer arrives at MCP intact, negative control 401s").
+    validations:
+      required: true
+
+  - type: textarea
+    id: fallback
+    attributes:
+      label: Fallback ladder
+      description: If the primary approach fails, the ordered alternatives to try before declaring it blocked.
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: false
