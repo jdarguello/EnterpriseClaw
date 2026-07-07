@@ -1,0 +1,78 @@
+name: "Bug / broken path"
+description: "Something in the framework is broken, flaky, or behaves wrong."
+title: "[bug] <what's broken>"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A defect in existing behavior. If the thing never worked and is net-new, that's a
+        **Capability**, not a bug.
+
+  - type: textarea
+    id: whats_broken
+    attributes:
+      label: What's broken
+      description: What fails, and what you expected instead.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - cli (Nushell enterpriseclaw)
+        - infra (OpenTofu / AWS)
+        - gitops (Argo CD / Events / Workflows / Crossplane manifests)
+        - actions (vendored action images)
+        - agentic (kagent trio / MCPs / agents)
+        - identity (Session-Broker consumer side / agentgateway authz)
+        - docs
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      description: Where it reproduces.
+      options:
+        - AWS sandbox (the real target)
+        - Dry-run UTM VM (ssh controlplane)
+        - Local (devbox, no cluster)
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The exact commands / trigger. Include the failing output (redact secret values).
+      value: |
+        1.
+        2.
+        3.
+
+        Output:
+        ```
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: Expected vs actual
+    validations:
+      required: true
+
+  - type: textarea
+    id: fragility
+    attributes:
+      label: Related known-fragility / prior art
+      description: Link a CLAUDE.md §6 known fragility, a memory, or a prior fix if this smells familiar.
+    validations:
+      required: false
