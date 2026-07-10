@@ -82,6 +82,15 @@ def "app-of-apps agentic-appset" [
                     project: "default"
                     source: { repoURL: $public_repo, targetRevision: $revision, path: "{{path}}" }
                     destination: { server: "https://kubernetes.default.svc", namespace: "kagent" }
+                    # ESO 0.10.5's GithubAccessToken admission silently prunes these fields,
+                    # so the live object can never match git — ignore or the app sits OutOfSync
+                    ignoreDifferences: [
+                        {
+                            group: "generators.external-secrets.io"
+                            kind: "GithubAccessToken"
+                            jsonPointers: ["/spec/repositories" "/spec/permissions"]
+                        }
+                    ]
                     syncPolicy: { automated: { prune: true, selfHeal: true } }
                 }
             }
