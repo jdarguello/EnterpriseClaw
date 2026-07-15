@@ -1,0 +1,31 @@
+---
+sidebar_position: 5
+title: Project status
+description: What is built, what is in flight, and what is aspirational — honest, no overclaiming.
+---
+
+# Project status
+
+EnterpriseClaw is pre-1.0 and moving fast toward its ArgoCon Japan demo (July 2026). This table is the honest ledger — it mirrors the internal status tracking, and pages elsewhere in these docs defer to it before claiming anything is "done".
+
+**Legend:** ✅ built & working · 🟡 in flight / partially wired · 🔴 broken · 🔮 aspirational (no implementing code yet)
+
+| Capability | Status |
+|---|---|
+| CLI `init`/`destroy`, AWS + GitHub + Argo CD + push mode (zero-to-running happy path) | ✅ Built & working |
+| OpenTofu modules (network, EKS, DNS, ECR, S3, Secrets Manager) with IRSA + EKS Pod Identity | ✅ Built & working |
+| Argo CD app-of-apps + External-Secrets wiring | ✅ Built & working |
+| GitHub `push` webhook → Argo Events → Argo Workflows → git-clone chain | ✅ Built & working |
+| Slack door: EventSource + Sensor + per-message Workflow (triage → read-only answers → login wall) | ✅ Built & live |
+| Session-Broker identity: Step 0 `/identity/resolve` + Keycloak login wall (incl. Google federation) | ✅ Built & live |
+| Agentic platform (kagent trio) in GitOps; read-only MCP path; Strict-JWT agentgateway routes | ✅ Deployed; proven on a dry-run cluster |
+| JWT-bearing `act` path → `platform-agent` (agent opens the PR) | 🟡 Wired, final secret provisioning pending |
+| Crossplane Golden Path (Claim → real infrastructure) | 🟡 In flight ([#4](https://github.com/jdarguello/EnterpriseClaw/issues/4)) |
+| Workflow Archive + S3 artifacts (audit trail), Kyverno policies | 🟡 Decided, not yet implemented |
+| Build/test/sonar Workflow templates beyond `git-clone` | 🟡 Templates exist, not wired |
+| CLI container-image build path (`enterpriseclaw containers …`) | 🔴 Broken — references a module that doesn't exist yet |
+| Microsoft Teams inbound door | 🔮 Aspirational |
+| Multi-cloud (`azure`, `gcp`) and GitLab support | 🔮 Aspirational — flags exist, no implementing code. **AWS + GitHub is the real target.** |
+| `--gitops-setup=pull` (PR mode) for the platform's own config | 🔮 Aspirational — flag only |
+
+Roadmap work is tracked as GitHub issues under the [ArgoCon Japan milestone](https://github.com/jdarguello/EnterpriseClaw/milestones) and beyond; each capability lands via a PR that links back to its issue.

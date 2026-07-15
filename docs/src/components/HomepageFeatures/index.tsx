@@ -5,49 +5,48 @@ import styles from './styles.module.css';
 
 type FeatureItem = {
   title: string;
-  Svg: React.ComponentType<React.ComponentProps<'svg'>>;
   description: ReactNode;
 };
 
 const FeatureList: FeatureItem[] = [
   {
-    title: 'Easy to Use',
-    Svg: require('@site/static/img/undraw_docusaurus_mountain.svg').default,
+    title: 'AI proposes, GitOps disposes',
     description: (
       <>
-        Docusaurus was designed from the ground up to be easily installed and
-        used to get your website up and running quickly.
+        The agent reasons about what to build, but the only way anything gets
+        created is a pull request a human merges — reconciled by Argo CD and
+        Crossplane. Every order leaves an Argo Workflow run, a PR, and git
+        history behind.
       </>
     ),
   },
   {
-    title: 'Focus on What Matters',
-    Svg: require('@site/static/img/undraw_docusaurus_tree.svg').default,
+    title: 'The mesh is the boundary, not the model',
     description: (
       <>
-        Docusaurus lets you focus on your docs, and we&apos;ll do the chores. Go
-        ahead and move your docs into the <code>docs</code> directory.
+        Which agents, MCP servers, and tools any identity can reach is decided
+        by workload SPIFFE (Istio ambient) and Keycloak JWT claims
+        (agentgateway) — never by the LLM. A prompt-injected agent still cannot
+        touch a tool it isn&apos;t allow-listed for.
       </>
     ),
   },
   {
-    title: 'Powered by React',
-    Svg: require('@site/static/img/undraw_docusaurus_react.svg').default,
+    title: 'Two identity rails',
     description: (
       <>
-        Extend or customize your website layout by reusing React. Docusaurus can
-        be extended while reusing the same header and footer.
+        Every privileged request carries a <em>human</em> identity (a Keycloak
+        JWT brokered from Slack) alongside the <em>workload</em> identity
+        (SPIFFE/mTLS) — so authorization and audit are per-person, not
+        per-bot-token.
       </>
     ),
   },
 ];
 
-function Feature({title, Svg, description}: FeatureItem) {
+function Feature({title, description}: FeatureItem) {
   return (
     <div className={clsx('col col--4')}>
-      <div className="text--center">
-        <Svg className={styles.featureSvg} role="img" />
-      </div>
       <div className="text--center padding-horiz--md">
         <Heading as="h3">{title}</Heading>
         <p>{description}</p>
