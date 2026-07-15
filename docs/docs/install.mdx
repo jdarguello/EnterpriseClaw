@@ -1,0 +1,122 @@
+---
+sidebar_position: 4
+title: Install & configuration
+description: Prerequisites, the .env contract, what `enterpriseclaw init` actually does, and teardown.
+---
+
+# Install & configuration reference
+
+:::note
+The install path is being streamlined ([#17](https://github.com/jdarguello/EnterpriseClaw/issues/17)). Today the flow is: clone the repo → write `cli/.env` → `devbox shell` → `enterpriseclaw init`. **AWS + GitHub + Argo CD + `push` mode is the tested path**; other flag values are aspirational (see the [project status page](./status.mdx)).
+:::
+
+## Prerequisites
+
+### Local machine
+
+- [Devbox](https://www.jetify.com/devbox). It pins the entire toolchain — Nushell, OpenTofu, kubectl, Helm, the Argo CLIs, AWS CLI, `gh`, Crossplane CLI, Podman — so nothing else needs to be installed by hand.
+
+### AWS account
+
+- An IAM identity (access key pair) that can provision **VPC, EKS, Route53/ACM, ECR, S3, and Secrets Manager**. Because the platform now *creates* its internal secret (`keycloak-internal`), the identity needs Secrets Manager **write** permissions (`CreateSecret`, `PutSecretValue`, `TagResource`, `DeleteSecret`) — read-only fails the apply.
+- A **Route53 hosted zone** for the domain you'll put in `domain_name`.
+- Bedrock is **not** required of this bootstrap identity — the LLM path uses a separate least-privilege identity bound to the gateway's ServiceAccount at runtime. The AWS *account* does need **Bedrock model access enabled for the Claude model** you intend to use.
+
+:::caution Real money
+`init` provisions real, billable AWS resources (an EKS cluster, NAT gateways, load balancers, …). It is designed to pair with `destroy` for ephemeral environments — teardown also sweeps up the EBS volumes the CSI driver provisioned outside OpenTofu's state. Note that `destroy` empties the ECR repos, so a following `init` needs the platform images pushed again.
+:::
+
+### Pre-existing Secrets Manager entries
+
+The OpenTofu read policy is scoped to **exact ARNs**, so these externally-managed secrets must exist *before* `init` (key names only — bring your own values):
+
+| Secret name | Keys | Purpose |
+|---|---|---|
+| `github-creds` | GitHub App credentials (`githubAppID`, `githubAppPrivateKey`, …) | Platform git automation (installation-token minting) |
+| `webhook-creds` | webhook secret | Validates inbound GitHub webhooks |
+| `slack-creds` | `verification_token`, `signing_secret`, `bot_oauth_token` | The Slack front door (EventSource validation + thread replies) |
+| `google-idp` | `CLIENT_ID`, `CLIENT_SECRET` | Google Workspace federation behind Keycloak |
+| `github-readonly-token` | `GH_TOKEN` | The read-only issues MCP's entire blast radius |
+
+Everything platform-internal (Keycloak admin/DB passwords, broker↔Keycloak client secret, Redis password, …) is **auto-generated** into the `keycloak-internal` secret at apply time — you never author those.
+
+### GitHub
+
+- A **GitHub App** for the platform's automation (its client id/secret go in `.env`; its App ID and private key in the `github-creds` secret above).
+- A **private GitOps config repo** (`CONFIG_REPO`) the CLI can clone and push to — it becomes your Argo CD app-of-apps root. The CLI patches it with live infra outputs on every `init`.
+
+### Slack
+
+- A **Slack app** installed in your workspace, subscribed to `app_mention` events, with its request URL pointed at `events.<your-domain>/slack`. Its verification token, signing secret, and bot OAuth token go in the `slack-creds` secret above — never in `.env` or git.
+- **Google Workspace** is the federated identity provider in the current build (behind Keycloak, via the `google-idp` secret). Other IdPs are possible in principle — Keycloak is the broker — but nothing else is wired today.
+
+## The `.env` contract
+
+The CLI reads configuration from the environment, not flags: Devbox loads `cli/.env` via `env_from`. The file is gitignored — never commit it, and no secret values belong anywhere else in the repo.
+
+| Key | What it is |
+|---|---|
+| `region` | AWS region to provision in |
+| `COMPANY_NAME` | Your organization's short name (prefixes cloud resources) |
+| `ORG_NAME` | GitHub organization/user owning the config repo |
+| `CONFIG_REPO` | Bare **name** (not URL) of your private GitOps config repo |
+| `BRANCH_NAME` | Branch of the config repo to track |
+| `domain_name` | The Route53-hosted domain for platform endpoints |
+| `argocd_version` | Argo CD chart version to install |
+| `GIT_USER` / `GIT_USER_EMAIL` | Author identity for CLI-made commits |
+| `GH_TOKEN` | GitHub token for the CLI's own git/`gh` operations |
+| `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET` | The platform GitHub App |
+| `github_app_registry` / `github_webhook_registry` | ECR repo names for the vendored action images |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | The bootstrap IAM identity |
+
+## Running it
+
+```bash
+git clone https://github.com/jdarguello/EnterpriseClaw.git
+cd EnterpriseClaw/cli
+# create .env (table above)
+devbox shell
+```
+
+The Devbox init hook puts `enterpriseclaw` on the PATH and drops you into Nushell.
+
+```
+enterpriseclaw -h       # list commands
+enterpriseclaw init     # zero → running platform
+```
+
+### What `init` does
+
+1. **Infrastructure** — generates tfvars from your `.env` (never hand-edited) and runs `tofu apply`: VPC, EKS, DNS, ECR, S3, Secrets Manager. Optionally `--persistant-state` first creates a remote-state backend.
+2. **Connect** — `aws eks update-kubeconfig` for `<cluster-name>-cluster`.
+3. **GitOps preconditioning** — clones your private config repo and patches it with live infra outputs (IAM role ARNs, certificate ARN, hosted zone ids, nodegroup labels); registers the **agentic platform** (kagent trio + agents/MCPs) and the **Session-Broker identity stack** (broker + Keycloak + Redis + Dapr) into the app-of-apps — you never install those by hand; pushes.
+4. **Argo CD handoff** — installs Argo CD + External-Secrets Operator, applies your repo's root Application, and lets the app-of-apps reconcile everything else.
+
+### `init` flags
+
+| Flag | Default | Notes |
+|---|---|---|
+| `--cloud-provider` | `aws` | `azure`/`gcp` are **aspirational** — no implementing code |
+| `--cluster-name` | `enterpriseclaw` | Cluster is created as `<name>-cluster` |
+| `--secret-provider` | `cloud` | Only `cloud` (AWS Secrets Manager) is implemented |
+| `--git-provider` | `github` | `gitlab`/`azure` are aspirational |
+| `--persistant-state` | `false` | Create a remote OpenTofu state backend first |
+| `--gitops-agent` | `argocd` | Only Argo CD |
+| `--gitops-setup` | `push` | `pull` (PR mode) is a flag with no implementing code yet |
+
+## Teardown
+
+```
+enterpriseclaw destroy
+```
+
+Connects to the cluster, drains the GitOps tree and its load balancers (waiting for AWS to actually release them), runs `tofu destroy`, and sweeps up CSI-provisioned EBS volumes that OpenTofu never tracked. Designed for ephemeral environments — expect a fresh `init` afterwards to start from zero (including empty ECR repos).
+
+## Building these docs
+
+```bash
+cd docs
+npm install
+npm start      # dev server
+npm run build  # production build (fails on broken links)
+```

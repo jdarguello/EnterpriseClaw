@@ -1,47 +1,38 @@
 ---
 sidebar_position: 1
+title: What is EnterpriseClaw?
+description: An enterprise AI agent gateway built on Argo — AI proposes, a governed GitOps pipeline disposes.
+slug: /intro
 ---
 
-# Tutorial Intro
+# What is EnterpriseClaw?
 
-Let's discover **Docusaurus in less than 5 minutes**.
+EnterpriseClaw lets a company run its own AI assistant **inside a regulated corporate environment**. Your team gives it orders from Slack; it reasons with an LLM; and everything privileged it does flows through the GitOps controls the enterprise already trusts — Argo Events, Argo Workflows, a pull request, Argo CD, Crossplane. It is based on [OpenClaw](https://openclaw.ai/)'s AI assistant.
 
-## Getting Started
+It is **not a chatbot**. It is an event-driven gateway for AI agent orchestration, built on two convictions:
 
-Get started by **creating a new site**.
+> **AI proposes; a governed, auditable GitOps pipeline disposes.**
+>
+> **The security boundary is the service mesh — never the model.**
 
-Or **try Docusaurus immediately** with **[docusaurus.new](https://docusaurus.new)**.
+The agent can *reason* about what to build, but the only way anything gets created is a pull request a human merges. And whether the agent can reach any tool at all is decided by workload SPIFFE identity and Keycloak JWT claims enforced at the mesh — so even a fully prompt-injected agent cannot touch a tool its identity isn't allow-listed for.
 
-### What you'll need
+## What you get
 
-- [Node.js](https://nodejs.org/en/download/) version 20.0 or above:
-  - When installing Node.js, you are recommended to check all checkboxes related to dependencies.
+Running `enterpriseclaw init` (a Nushell CLI in a Devbox environment) takes you from zero to:
 
-## Generate a new site
+- an **AWS EKS** substrate provisioned with OpenTofu,
+- an **Argo CD app-of-apps** reconciling the whole platform from your private config repo,
+- an **Istio ambient** mesh with **agentgateway** as the L7 waypoint,
+- the **kagent trio** (kagent + kmcp + agentgateway) running agents and MCP servers on-cluster,
+- a **Slack front door** where each message becomes one short-lived, archived Argo Workflow run,
+- and a **Session-Broker** integration binding each Slack user to a real corporate identity (Keycloak, Google-federated) — so privileged actions carry a *human* identity, not a bot token.
 
-Generate a new Docusaurus site using the **classic template**.
+## Where to go next
 
-The classic template will automatically be added to your project after you run the command:
+- **[Architecture](./architecture.mdx)** — the spine, the two identity rails, and where the trust boundaries actually sit.
+- **[Demo walkthrough](./demo-walkthrough.mdx)** — the Golden-Path-via-chat scenario, step by step.
+- **[Install & configuration](./install.mdx)** — prerequisites, the `.env` contract, and what `init` does.
+- **[Project status](./status.mdx)** — the honest ledger of built / in-flight / aspirational.
 
-```bash
-npm init docusaurus@latest my-website classic
-```
-
-You can type this command into Command Prompt, Powershell, Terminal, or any other integrated terminal of your code editor.
-
-The command also installs all necessary dependencies you need to run Docusaurus.
-
-## Start your site
-
-Run the development server:
-
-```bash
-cd my-website
-npm run start
-```
-
-The `cd` command changes the directory you're working with. In order to work with your newly created Docusaurus site, you'll need to navigate the terminal there.
-
-The `npm run start` command builds your website locally and serves it through a development server, ready for you to view at http://localhost:3000/.
-
-Open `docs/intro.md` (this page) and edit some lines: the site **reloads automatically** and displays your changes.
+This architecture is the subject of the ArgoCon Japan 2026 talk **"Teaching Argo to Talk: An Event-Driven Gateway for AI Agent Orchestration"** (July 28, 2026).

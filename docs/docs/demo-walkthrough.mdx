@@ -1,0 +1,72 @@
+---
+sidebar_position: 3
+title: Demo walkthrough
+description: The Golden-Path-via-chat scenario, step by step — what fires, what enforces, and what you'd watch on each dashboard.
+---
+
+# Demo walkthrough — a Golden Path via chat
+
+The scenario: a platform engineer asks in Slack for a new service plus a managed dependency. The agent reasons about the request and opens a **pull request carrying a Crossplane Claim**; a human merges it; Argo CD and Crossplane reconcile it into existence.
+
+This page walks the path end-to-end. Each step names the component doing the work and what you would watch in its UI (the demo leads with the **kagent dashboard, the agentgateway view, Argo CD, and the live Slack thread** — not a terminal).
+
+:::info Honest scope
+Steps 1–6 (through the login wall and the read-only path) are **live today**. The JWT-bearing action branch (step 7) is wired and pending final secret provisioning; the Crossplane reconciliation (step 9) is in flight ([#4](https://github.com/jdarguello/EnterpriseClaw/issues/4)). See the [project status page](./status.mdx) before assuming any step is done.
+:::
+
+## 1. The message
+
+Someone mentions the bot in a channel:
+
+> *@assistant create a new service `orders-api` with a Redis cache in the payments namespace*
+
+Slack delivers an `app_mention` event to `events.<your-domain>/slack` — an ALB in front of an Istio gateway.
+
+## 2. Argo Events catches it
+
+The **Slack EventSource** receives the event, and the **`slack-mention` Sensor** applies its dependency logic: filter on `type == app_mention`, then extract `text`, `user`, `channel`, `ts`, and `thread_ts` into workflow parameters. Malformed or irrelevant events die here — before any compute spins up.
+
+## 3. One workflow per message
+
+The Sensor submits an **Argo Workflow**. Compute is stateless: the run first rebuilds the whole Slack thread (`conversations.replies`) into a transcript, so multi-turn context survives without any long-running process or server-side session. If the run fails, an `onExit` handler posts an apology to the thread instead of going silent.
+
+## 4. Triage — before any identity is required
+
+The transcript goes over A2A to the **toolless triage agent** (`general-classifier`). It has no MCP permissions at all — its SPIFFE principal is in no tool's allow-list — so this hop is safe to expose to any message. It returns structured output the DAG can branch on: is this **read-only** or an **action**?
+
+- **Read-only** (e.g. "what open issues mention timeouts?") → the `github-reader` agent answers using a physically `--read-only` GitHub issues MCP, and the reply is posted to the thread. Done — no login ever demanded.
+- **Action** → continue below.
+
+## 5. Step 0 — who is this human?
+
+The workflow calls the **Session-Broker** reader (`POST /identity/resolve` with the Slack user id). The broker either returns the user's cached **Keycloak JWT** or reports there is none.
+
+## 6. The login wall (no token)
+
+If the user has no session, the workflow calls the broker's `POST /auth/login/start` and posts the returned **Keycloak `/authorize` URL** into the thread. The run ends there — the wall is enforced by the mesh (privileged targets require a valid JWT), not by the agent's goodwill. The user logs in with their corporate identity (Google Workspace federated behind Keycloak), then replies in the thread; that reply fires a fresh workflow, which now finds a token at Step 0.
+
+## 7. The action path (token found)
+
+The workflow's `act` step uses the `enterpriseclaw` CLI as an **A2A client**, attaching `Authorization: Bearer <user JWT>`, and calls **agentgateway** — the Istio ambient L7 waypoint. agentgateway:
+
+1. validates the JWT against Keycloak's JWKS (signature, issuer, audience),
+2. authorizes on **both** the calling workload's SPIFFE principal *and* the JWT's claims,
+3. routes A2A to the **`platform-agent`** on kagent.
+
+The agent reasons on **Claude via AWS Bedrock** — called through agentgateway as the LLM gateway (only the gateway's ServiceAccount holds the Bedrock IRSA role). When it decides to act, its MCP tool calls go back through agentgateway's **MCP federation with the same user JWT forwarded** — a tokenless privileged tool call is rejected at the gateway.
+
+## 8. The proposal is a pull request
+
+The agent calls the kmcp-managed **GitHub MCP** (`create_branch` / `create_or_update_file` / `create_pull_request`) and opens a PR containing the new service's manifests and a **Crossplane Claim** for the managed dependency. It fills the same PR template contract a human would. The PR link is posted back to the Slack thread.
+
+**AI proposes — and stops there.** Nothing has been created yet.
+
+## 9. GitOps disposes
+
+A human reviews and merges. **Argo CD** syncs the change; **Crossplane** reconciles the Claim; the service Deployment comes up immediately and the managed dependency (e.g. a cache or database) follows. The audit trail already exists without any extra tooling: the archived Workflow run, the agentgateway trace, the PR, and git history.
+
+## What to take away
+
+- **Every step is an ordinary Argo primitive** — EventSource, Sensor filters, a branching DAG, parameter propagation, the Workflow archive — doing an unusual job.
+- **The security story never depends on the model behaving.** Reachability is decided by SPIFFE + JWT claims at the mesh; the anonymous door is physically read-only.
+- **The human stays in the loop exactly once**, at the merge — the same gate every other change to the platform already goes through.

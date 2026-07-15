@@ -26,12 +26,34 @@ spec:
   destination:
     server: "https://kubernetes.default.svc"
     namespace: alb-controller
+  # The chart renders a fresh self-signed webhook cert (genSignedCert) on every
+  # render, and the controller manages its live serving cert itself — desired and
+  # live can never agree. Without these ignores, selfHeal keeps re-syncing and
+  # stomps the live cert, opening x509 windows that reject every Service/Ingress
+  # apply cluster-wide (the init "webhook race").
+  ignoreDifferences:
+    - kind: Secret
+      name: aws-load-balancer-tls
+      namespace: alb-controller
+      jsonPointers:
+        - /data
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      name: aws-load-balancer-webhook
+      jqPathExpressions:
+        - .webhooks[].clientConfig.caBundle
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      name: aws-load-balancer-webhook
+      jqPathExpressions:
+        - .webhooks[].clientConfig.caBundle
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - RespectIgnoreDifferences=true
     retry:
       limit: 5
       backoff:
